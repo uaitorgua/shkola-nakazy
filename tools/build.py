@@ -20,7 +20,7 @@ ISCC = [p for p in (Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Inn
                     Path(r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe")) if p.exists()]
 TESS = ROOT / "ocr" / "tessdata"
 SCANNER_TESS = ROOT.parent / "Сканер-ШКОЛА" / "ocr" / "tessdata"
-TESTS = ["test_db", "test_templates", "test_people", "test_oldimport", "test_export", "test_cases", "test_gui", "test_stress"]
+TESTS = ["test_db", "test_templates", "test_people", "test_oldimport", "test_export", "test_cases", "test_promo", "test_gui", "test_stress"]
 
 
 def step(n: int, title: str, cmd: list[str], log: Path | None = None) -> None:
@@ -78,7 +78,7 @@ step(3, "Властивості файлу", [PY, "tools/version_info.py"])
 step(4, "PyInstaller", [
     PY, "-m", "PyInstaller", "--noconfirm", "--clean", "--onefile", "--windowed",
     "--name", NAME, "--icon", "assets/logo.ico", "--version-file", "build/version_info.txt",
-    "--add-data", "assets;assets", "--add-data", "LICENSE.txt;.", "--add-data", "ocr;ocr",
+    "--add-data", "assets;assets", "--add-data", "LICENSE.txt;.", "--add-data", "ocr;ocr", "--add-data", "promo;promo",
     "--hidden-import", "win32timezone", "--collect-all", "pypdfium2", "--collect-all", "pypdfium2_raw",
     "--collect-all", "tesserocr", "--collect-submodules", "docx", "--collect-data", "docx",
     "--collect-submodules", "openpyxl", "--hidden-import", "PySide6.QtPrintSupport",

@@ -33,6 +33,10 @@ class MainWindow(QMainWindow):
         self.side.currentItemChanged.connect(lambda *_: self.reload_list())
         left = QWidget(); ll = QVBoxLayout(left); ll.setContentsMargins(6, 6, 6, 6)
         ll.addWidget(QLabel("Рік")); ll.addWidget(self.year); ll.addWidget(self.side, 1)
+        import os
+        from .promo_panel import PromoPanel
+        self.promo = PromoPanel(online=not os.environ.get("NAKAZY_OFFLINE"))  # курси УАІТ: сайт → кеш → вшите
+        ll.addWidget(self.promo)
 
         self.search = QLineEdit(); self.search.setPlaceholderText("Пошук у наказах…")
         self.search.textChanged.connect(self.reload_list)
