@@ -119,8 +119,12 @@ class OrderEditor(EditorWindow):
         row = db.get(order_id)
         super().__init__(parent, html=row["body_html"], title=row["title"] or "Наказ")
         self.readonly = row["status"] != "draft"
+        self.imported = row["source"] == "import"
         self._build_dock(row)
-        if self.readonly:
+        if self.imported:
+            self.statusBar().showMessage("Архівний наказ (імпорт): можна виправити розпізнаний текст і заголовок; "
+                                         "оригінал файла збережено.")
+        elif self.readonly:
             self.edit.setReadOnly(True)
             self.statusBar().showMessage("Наказ зареєстровано: лише перегляд. Зміни вносяться новим наказом.")
 
@@ -154,6 +158,11 @@ class OrderEditor(EditorWindow):
         self.warn = QLabel(); self.warn.setWordWrap(True); f.addRow(self.warn)
         save = QPushButton("Зберегти в базу (Ctrl+S)"); save.clicked.connect(self.save_order)
         save.setEnabled(not self.readonly); f.addRow(save)
+        if row["source"] == "import":
+            fix = QPushButton("Зберегти виправлення розпізнаного"); fix.clicked.connect(self.save_fix)
+            orig = QPushButton("Відкрити оригінал"); orig.clicked.connect(self.open_original)
+            self.title_e.setEnabled(True); self.signer.setEnabled(True); self.notes.setEnabled(True)
+            f.addRow(fix); f.addRow(orig)
         exp = QPushButton("Зберегти наказ у DOCX/PDF (з бланком)"); exp.clicked.connect(self.export_order)
         f.addRow(exp)
         dock = QDockWidget("Реквізити наказу", self); dock.setWidget(w)
@@ -227,11 +236,35 @@ class OrderEditor(EditorWindow):
         except Exception as e:
             QMessageBox.warning(self, "Накази ШКОЛА", str(e))
 
+    def save_fix(self):
+        try:
+            self.db.fix_imported(self.order_id, title=self.title_e.text().strip(), body_html=self.html(),
+                                 signer=self.signer.text().strip(), notes=self.notes.text().strip())
+        except OrderLocked as e:
+            QMessageBox.warning(self, "Накази ШКОЛА", str(e)); return
+        self.edit.document().setModified(False)
+        self.statusBar().showMessage("Виправлення збережено (попередня версія в історії)")
+        self.saved.emit(self.order_id)
+
+    def open_original(self):
+        o = self.db.original(self.order_id)
+        if not o:
+            return
+        import os
+        import tempfile
+        path = os.path.join(tempfile.mkdtemp(), o["filename"])
+        with open(path, "wb") as fh:
+            fh.write(o["data"])
+        os.startfile(path)  # відкрити у програмі за замовчуванням Windows
+
     def save(self):  # Ctrl+S у стрічці InterText
-        self.save_order()
+        self.save_fix() if self.imported else self.save_order()
 
     def closeEvent(self, e):
-        if not self.readonly and self.edit.document().isModified():
+        if self.imported and self.edit.document().isModified():
+            if QMessageBox.question(self, "Закрити", "Зберегти виправлення розпізнаного?") == QMessageBox.Yes:
+                self.save_fix()
+        elif not self.readonly and self.edit.document().isModified():
             r = QMessageBox.question(self, "Закрити", "Зберегти зміни в базу?",
                                      QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel)
             if r == QMessageBox.Cancel:

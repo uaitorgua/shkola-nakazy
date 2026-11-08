@@ -10,7 +10,7 @@ import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 
 @dataclass(frozen=True)
@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS orders (
     title TEXT NOT NULL DEFAULT '',
     type_name TEXT NOT NULL DEFAULT '',
     template_id TEXT NOT NULL DEFAULT '',
+    source TEXT NOT NULL DEFAULT '',
     body_html TEXT NOT NULL DEFAULT '',
     basis TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'draft',
@@ -85,6 +86,9 @@ CREATE TABLE IF NOT EXISTS order_persons (
     order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
     person_id INTEGER NOT NULL REFERENCES people(id), role TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (order_id, person_id, role));
+CREATE TABLE IF NOT EXISTS originals (
+    order_id INTEGER PRIMARY KEY REFERENCES orders(id) ON DELETE CASCADE,
+    filename TEXT NOT NULL, data BLOB NOT NULL, ocr_text TEXT NOT NULL DEFAULT '');
 CREATE TABLE IF NOT EXISTS order_versions (
     id INTEGER PRIMARY KEY, order_id INTEGER NOT NULL, at TEXT NOT NULL, snapshot_json TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS attachments (
@@ -148,7 +152,7 @@ class Database:
 
     def _migrate(self):
         cols = {r[1] for r in self.con.execute("PRAGMA table_info(orders)")}
-        for col in ("type_name", "template_id"):  # v1 -> v2
+        for col in ("type_name", "template_id", "source"):  # v1 -> v2 -> v4
             if col not in cols:
                 self.con.execute(f"ALTER TABLE orders ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
         self.con.execute("INSERT OR REPLACE INTO meta VALUES ('schema_version', ?)", (str(SCHEMA_VERSION),))
@@ -370,6 +374,54 @@ class Database:
             self.con.execute("ROLLBACK")
             raise
         return idx
+
+    def import_order(self, kind: str, number: int, date: str, title: str, body_html: str = "",
+                     signer: str = "", filename: str = "", data: bytes | None = None, ocr_text: str = "",
+                     notes: str = "") -> int:
+        """Архівний наказ з наявним номером (імпорт). Номер не видається, а береться з документа;
+        лічильник виду піднімається до найбільшого номера, щоб нові накази продовжували нумерацію."""
+        if kind not in KIND_BY_CODE:
+            raise ValueError("Невідомий вид наказу")
+        if not number or number < 1:
+            raise RegistrationError("Не вказано номер наказу.")
+        d = dt.date.fromisoformat(date)
+        idx = make_index(kind, number)
+        now = _now()
+        with self.tx():
+            if self.con.execute("SELECT 1 FROM orders WHERE kind = ? AND year = ? AND number = ?",
+                                (kind, d.year, number)).fetchone():
+                raise RegistrationError(f"Наказ № {idx} за {d.year} рік уже є в базі.")
+            cur = self.con.execute(
+                "INSERT INTO orders (kind, number, reg_index, date, year, title, body_html, status, signer, notes, "
+                "source, created_at, updated_at) VALUES (?,?,?,?,?,?,?,'registered',?,?,'import',?,?)",
+                (kind, number, idx, date, d.year, title, body_html, signer, notes, now, now))
+            oid = cur.lastrowid
+            if data is not None:
+                self.con.execute("INSERT INTO originals VALUES (?, ?, ?, ?)", (oid, filename, data, ocr_text))
+            self.con.execute("INSERT OR IGNORE INTO counters VALUES (?, ?, 0)", (kind, d.year))
+            self.con.execute("UPDATE counters SET last_number = MAX(last_number, ?) WHERE kind = ? AND year = ?",
+                             (number, kind, d.year))
+            self._audit(oid, "import", f"{idx} {filename}")
+            self._reindex(oid)
+        return oid
+
+    def fix_imported(self, order_id: int, **fields):
+        """Виправлення розпізнаного тексту архівного наказу (не зміна наказу: оригінал зберігається)."""
+        row = self._require(order_id)
+        if row["source"] != "import":
+            raise OrderLocked("Виправляти можна лише текст імпортованого наказу.")
+        fields = {k: v for k, v in fields.items() if k in ("title", "body_html", "signer", "notes", "type_name")}
+        import json
+        with self.tx():
+            self.con.execute("INSERT INTO order_versions (order_id, at, snapshot_json) VALUES (?, ?, ?)",
+                             (order_id, _now(), json.dumps(dict(row), ensure_ascii=False)))
+            self.con.execute(f"UPDATE orders SET {', '.join(k + ' = ?' for k in fields)}, updated_at = ? WHERE id = ?",
+                             [*fields.values(), _now(), order_id])
+            self._audit(order_id, "fix-import", ",".join(fields))
+            self._reindex(order_id)
+
+    def original(self, order_id: int):
+        return self.con.execute("SELECT * FROM originals WHERE order_id = ?", (order_id,)).fetchone()
 
     def cancel(self, order_id: int, reason: str):
         """Позначка «скасовано» (номер лишається в журналі, пропусків немає)."""

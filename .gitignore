@@ -18,3 +18,4 @@ release/
 *.db
 *.sqlite
 data/
+ocr/

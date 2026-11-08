@@ -26,9 +26,11 @@ def audit(db: Database, today: dt.date | None = None) -> list[tuple[str, str]]:
         rows = db.journal(kind, year)
         nums = [r["number"] for r in rows]
         expected = list(range(1, len(nums) + 1))
+        imported = any(r["source"] == "import" for r in rows)
         if nums != expected:
             missing = sorted(set(range(1, max(nums) + 1)) - set(nums))
-            out.append(("помилка", f"{name}, {year}: пропуски або повтори номерів (бракує {missing[:10]})"))
+            # в архіві пропуски можливі (не всі накази оцифровано): лише увага
+            out.append(("увага" if imported and len(set(nums)) == len(nums) else "помилка", f"{name}, {year}: пропуски або повтори номерів (бракує {missing[:10]})"))
         cnt = con.execute("SELECT last_number FROM counters WHERE kind = ? AND year = ?", (kind, year)).fetchone()
         if not cnt or cnt[0] != max(nums):
             out.append(("помилка", f"{name}, {year}: лічильник ({cnt[0] if cnt else '–'}) не збігається "
@@ -40,14 +42,15 @@ def audit(db: Database, today: dt.date | None = None) -> list[tuple[str, str]]:
             if not r["date"] or int(r["date"][:4]) != year:
                 out.append(("помилка", f"Наказ № {r['reg_index']}: дата {r['date']} не з {year} року"))
             elif prev and r["date"] < prev["date"]:
-                out.append(("помилка", f"{name}: наказ № {r['reg_index']} від {format_date(r['date'])} "
+                out.append(("увага" if "import" in (r["source"], prev["source"]) else "помилка", f"{name}: наказ № {r['reg_index']} від {format_date(r['date'])} "
                                        f"датований раніше за № {prev['reg_index']} від {format_date(prev['date'])}"))
             if r["date"] and dt.date.fromisoformat(r["date"]) > today:
                 out.append(("увага", f"Наказ № {r['reg_index']} датований майбутнім ({format_date(r['date'])})"))
             if not r["title"].startswith("Про "):
                 out.append(("увага", f"Наказ № {r['reg_index']}: заголовок не починається з «Про»"))
             if not r["signer"].strip():
-                out.append(("помилка", f"Наказ № {r['reg_index']}: не вказано підписанта"))
+                out.append(("увага" if r["source"] == "import" else "помилка",
+                            f"Наказ № {r['reg_index']}: не вказано підписанта"))
             if r["status"] == "cancelled" and "Скасовано" not in r["notes"]:
                 out.append(("увага", f"Наказ № {r['reg_index']}: скасовано без підстави в примітках"))
             prev = r
@@ -65,7 +68,7 @@ def audit(db: Database, today: dt.date | None = None) -> list[tuple[str, str]]:
     # зареєстровані тексти не змінювались після реєстрації
     for r in con.execute("SELECT o.id, o.reg_index FROM orders o JOIN order_versions v ON v.order_id = o.id "
                          "JOIN audit a ON a.order_id = o.id AND a.action = 'register' "
-                         "WHERE v.at > a.at GROUP BY o.id"):
+                         "WHERE v.at > a.at AND o.source != 'import' GROUP BY o.id"):
         out.append(("помилка", f"Наказ № {r['reg_index']} змінювався після реєстрації"))
     n_fts = con.execute("SELECT COUNT(*) FROM _fts_cache").fetchone()[0]
     n_ord = con.execute("SELECT COUNT(*) FROM orders").fetchone()[0]
