@@ -14,4 +14,4 @@
 - Норми подавати лише з першоджерелом (див. PLAN.md, розд. 1).
 
 ## Репозиторій
-- Публічний: github.com/uaitorgua/shkola-nakazy (створити: GitHub тимчасово відмовив 08.11 «too many repositories, too quickly», повторити пізніше: `gh repo create uaitorgua/shkola-nakazy --public --source . --push`).
+- Публічний: https://github.com/uaitorgua/shkola-nakazy (створено 08.11.2026, гілка main).
