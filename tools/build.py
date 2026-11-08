@@ -20,7 +20,7 @@ ISCC = [p for p in (Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Inn
                     Path(r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe")) if p.exists()]
 TESS = ROOT / "ocr" / "tessdata"
 SCANNER_TESS = ROOT.parent / "Сканер-ШКОЛА" / "ocr" / "tessdata"
-TESTS = ["test_db", "test_templates", "test_people", "test_oldimport", "test_export", "test_gui", "test_stress"]
+TESTS = ["test_db", "test_templates", "test_people", "test_oldimport", "test_export", "test_cases", "test_gui", "test_stress"]
 
 
 def step(n: int, title: str, cmd: list[str], log: Path | None = None) -> None:

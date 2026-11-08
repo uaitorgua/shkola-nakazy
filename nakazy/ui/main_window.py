@@ -46,7 +46,7 @@ class MainWindow(QMainWindow):
         bar = QHBoxLayout()
         for text, slot in (("Новий наказ", self.new_order), ("Відкрити", self.edit_current),
                            ("Зареєструвати", self.register_current), ("Наказ про зміни", self.amend_current),
-                           ("Скасувати", self.cancel_current), ("Зберегти DOCX/PDF…", self.export_current), ("Журнал…", self.export_journal), ("Перевірка", self.run_audit), ("Люди…", self.open_people), ("Імпорт наказів…", self.import_orders),
+                           ("Скасувати", self.cancel_current), ("Зберегти DOCX/PDF…", self.export_current), ("Журнал…", self.export_journal), ("Справи…", self.open_cases), ("Перевірка", self.run_audit), ("Люди…", self.open_people), ("Імпорт наказів…", self.import_orders),
                            ("Заклад…", self.settings)):
             b = QPushButton(text); b.clicked.connect(slot); bar.addWidget(b)
         bar.addStretch()
@@ -224,6 +224,10 @@ class MainWindow(QMainWindow):
         from .oldimport_dialog import OldImportDialog
         OldImportDialog(self, self.db).exec()
         self.refresh()
+
+    def open_cases(self):
+        from .cases_dialog import CasesDialog
+        CasesDialog(self, self.db, self.year.currentData()).exec()
 
     def open_people(self):
         from .people_window import PeopleWindow

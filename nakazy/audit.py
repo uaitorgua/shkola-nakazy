@@ -70,6 +70,11 @@ def audit(db: Database, today: dt.date | None = None) -> list[tuple[str, str]]:
                          "JOIN audit a ON a.order_id = o.id AND a.action = 'register' "
                          "WHERE v.at > a.at AND o.source != 'import' GROUP BY o.id"):
         out.append(("помилка", f"Наказ № {r['reg_index']} змінювався після реєстрації"))
+    from .cases import Cases
+    cs = Cases(db)
+    for (y,) in con.execute("SELECT DISTINCT year FROM orders WHERE year IS NOT NULL"):
+        for t in cs.problems(y):
+            out.append(("увага", f"Номенклатура {y}: {t}"))
     n_fts = con.execute("SELECT COUNT(*) FROM _fts_cache").fetchone()[0]
     n_ord = con.execute("SELECT COUNT(*) FROM orders").fetchone()[0]
     if n_fts != n_ord:

@@ -75,7 +75,8 @@ class Secretary(unittest.TestCase):
         self.w.export_journal()
         self.assertTrue(os.path.getsize(path) > 0)
         self.w.run_audit()
-        self.assertIn("Порушень не знайдено", self.msgs[-1])
+        self.assertNotIn("[помилка]", self.msgs[-1])
+        self.assertIn("руху учнів", self.msgs[-1])  # строк для руху учнів визначає заклад: нагадування
         self.assertEqual([x for x in audit(self.db) if x[0] == "помилка"], [])
 
 

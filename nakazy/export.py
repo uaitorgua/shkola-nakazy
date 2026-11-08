@@ -245,28 +245,60 @@ def export_docx(db: Database, order_id: int, path: str) -> str:
     return path
 
 
-def _docx_to_pdf(docx_path: str, pdf_path: str):
-    """Word (якщо встановлено) або LibreOffice; без інтернету."""
+def _soffice():
+    return shutil.which("soffice") or next((p for p in (
+        r"C:\Program Files\LibreOffice\program\soffice.exe",
+        r"C:\Program Files (x86)\LibreOffice\program\soffice.exe") if os.path.exists(p)), None)
+
+
+def docx_to_pdf_many(docx_paths: list[str]) -> list[str]:
+    """Пакетне перетворення: один запуск Word або LibreOffice на всі файли (для справ із сотнями наказів).
+    PDF лягає поруч із DOCX з тим самим іменем."""
+    pdfs = [os.path.splitext(p)[0] + ".pdf" for p in docx_paths]
+    if not docx_paths:
+        return pdfs
     try:
         import win32com.client  # type: ignore
         word = win32com.client.DispatchEx("Word.Application"); word.Visible = False
         try:
-            d = word.Documents.Open(os.path.abspath(docx_path), ReadOnly=True)
-            d.ExportAsFixedFormat(os.path.abspath(pdf_path), 17); d.Close(False)
-            return
+            for src, dst in zip(docx_paths, pdfs):
+                d = word.Documents.Open(os.path.abspath(src), ReadOnly=True)
+                d.ExportAsFixedFormat(os.path.abspath(dst), 17); d.Close(False)
+            return pdfs
         finally:
             word.Quit()
     except Exception:
         pass
-    soffice = shutil.which("soffice") or next((p for p in (
-        r"C:\Program Files\LibreOffice\program\soffice.exe",
-        r"C:\Program Files (x86)\LibreOffice\program\soffice.exe") if os.path.exists(p)), None)
+    soffice = _soffice()
     if not soffice:
         raise RuntimeError("Для PDF потрібен Microsoft Word або LibreOffice. Збережіть наказ у DOCX.")
-    out = tempfile.mkdtemp()
-    subprocess.run([soffice, "--headless", "--convert-to", "pdf", "--outdir", out, docx_path],
-                   check=True, capture_output=True, timeout=180)
-    shutil.move(os.path.join(out, os.path.splitext(os.path.basename(docx_path))[0] + ".pdf"), pdf_path)
+    by_dir: dict[str, list[str]] = {}
+    for p in docx_paths:
+        by_dir.setdefault(os.path.dirname(os.path.abspath(p)), []).append(p)
+    for d, files in by_dir.items():
+        for i in range(0, len(files), 50):  # обмеження довжини командного рядка
+            subprocess.run([soffice, "--headless", "--convert-to", "pdf", "--outdir", d, *files[i:i + 50]],
+                           check=True, capture_output=True, timeout=600)
+    missing = [p for p in pdfs if not os.path.exists(p)]
+    if missing:
+        raise RuntimeError(f"Не вдалося перетворити в PDF: {', '.join(os.path.basename(m) for m in missing[:5])}")
+    return pdfs
+
+
+def _docx_to_pdf(docx_path: str, pdf_path: str):
+    """Word (якщо встановлено) або LibreOffice; без інтернету."""
+    tmp = tempfile.mkdtemp()
+    src = os.path.join(tmp, "doc.docx")
+    shutil.copy2(docx_path, src)
+    out = docx_to_pdf_many([src])[0]
+    shutil.move(out, pdf_path)
+
+
+def append_file_attachments(db: Database, order_id: int, writer):
+    from pypdf import PdfReader
+    for a in db.attachments(order_id):
+        if a["mode"] == "file" and (a["filename"] or "").lower().endswith(".pdf") and a["data"]:
+            writer.append(PdfReader(io.BytesIO(a["data"])))
 
 
 def export_pdf(db: Database, order_id: int, path: str) -> str:
