@@ -247,9 +247,31 @@ class MainWindow(QMainWindow):
         if self._try(lambda: fn(self.db, r["id"], path)):
             self.statusBar().showMessage(f"Збережено: {path}", 8000)
 
+def _setup_log():
+    """Журнал %APPDATA%\nakazy-shkola\nakazy.log: необроблені помилки пишуться туди й показуються користувачу."""
+    import logging
+    import os
+    import sys
+    from ..db import default_db_path
+    path = os.path.join(os.path.dirname(default_db_path()), "nakazy.log")
+    logging.basicConfig(filename=path, level=logging.INFO, encoding="utf-8",
+                        format="%(asctime)s %(levelname)s %(message)s")
+    logging.info("Старт Накази ШКОЛА")
+
+    def hook(tp, val, tb):
+        logging.error("Необроблена помилка", exc_info=(tp, val, tb))
+        try:
+            QMessageBox.critical(None, "Накази ШКОЛА", f"Сталася помилка: {val}
+Деталі в журналі: {path}")
+        except Exception:
+            pass
+    sys.excepthook = hook
+
+
 def run():
     import sys
     from PySide6.QtWidgets import QApplication
+    _setup_log()
     app = QApplication(sys.argv)
     w = MainWindow(Database())
     w.show()
