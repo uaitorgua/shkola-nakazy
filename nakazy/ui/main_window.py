@@ -46,7 +46,7 @@ class MainWindow(QMainWindow):
         bar = QHBoxLayout()
         for text, slot in (("Новий наказ", self.new_order), ("Відкрити", self.edit_current),
                            ("Зареєструвати", self.register_current), ("Наказ про зміни", self.amend_current),
-                           ("Скасувати", self.cancel_current), ("Журнал…", self.export_journal),
+                           ("Скасувати", self.cancel_current), ("Журнал…", self.export_journal), ("Перевірка", self.run_audit),
                            ("Заклад…", self.settings)):
             b = QPushButton(text); b.clicked.connect(slot); bar.addWidget(b)
         bar.addStretch()
@@ -110,13 +110,17 @@ class MainWindow(QMainWindow):
                                    year=None if mode == "draft" else self.year.currentData(),
                                    status="draft" if mode == "draft" else None,
                                    query=self.search.text())
+        keep = self.list.currentItem().data(0, ROLE) if self.list.currentItem() else None
         self.list.clear()
         for r in rows:
             li = QTreeWidgetItem([r["reg_index"] or "–", format_date(r["date"]), r["title"],
                                   KIND_BY_CODE[r["kind"]].title, STATUS_TITLES[r["status"]]])
             li.setData(0, ROLE, r["id"])
             self.list.addTopLevelItem(li)
-        self.preview.clear()
+            if r["id"] == keep:
+                self.list.setCurrentItem(li)
+        if self.list.currentItem() is None:
+            self.preview.clear()
 
     def current_row(self):
         it = self.list.currentItem()
@@ -205,6 +209,15 @@ class MainWindow(QMainWindow):
         path, _ = QFileDialog.getSaveFileName(self, "Зберегти журнал", f"Журнал {code} {year}.docx", "DOCX (*.docx)")
         if path:
             self._try(lambda: export_journal_docx(self.db, code, year, path))
+
+    def run_audit(self):
+        from ..audit import audit
+        found = audit(self.db)
+        if not found:
+            QMessageBox.information(self, "Перевірка реєстру", "Порушень не знайдено.")
+            return
+        text = "\n".join(f"[{lvl}] {t}" for lvl, t in found)
+        QMessageBox.warning(self, "Перевірка реєстру", f"Знайдено: {len(found)}\n\n{text[:4000]}")
 
     def settings(self):
         dlg = QDialog(self); dlg.setWindowTitle("Заклад")

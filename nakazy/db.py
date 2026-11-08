@@ -7,6 +7,7 @@ from __future__ import annotations
 import datetime as dt
 import os
 import sqlite3
+from contextlib import contextmanager
 from dataclasses import dataclass
 
 SCHEMA_VERSION = 2
@@ -160,6 +161,18 @@ class Database:
         snap = json.loads(v["snapshot_json"])
         self.update_draft(v["order_id"], **{k: snap[k] for k in (_EDITABLE | {"kind"}) if k in snap})
 
+    @contextmanager
+    def tx(self):
+        """Атомарна зміна: або все (наказ, індекс пошуку, журнал дій), або нічого."""
+        if self.con.in_transaction:
+            yield; return
+        self.con.execute("BEGIN IMMEDIATE")
+        try:
+            yield
+        except BaseException:
+            self.con.execute("ROLLBACK"); raise
+        self.con.execute("COMMIT")
+
     def close(self):
         self.con.close()
 
@@ -261,11 +274,12 @@ class Database:
         fields = {k: v for k, v in fields.items() if k in _EDITABLE}
         cols = ["kind", "status", "created_at", "updated_at", *fields]
         vals = [kind, "draft", now, now, *fields.values()]
-        cur = self.con.execute(
-            f"INSERT INTO orders ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})", vals)
-        oid = cur.lastrowid
-        self._reindex(oid)
-        self._audit(oid, "create", "")
+        with self.tx():
+            cur = self.con.execute(
+                f"INSERT INTO orders ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})", vals)
+            oid = cur.lastrowid
+            self._reindex(oid)
+            self._audit(oid, "create", "")
         return oid
 
     def update_draft(self, order_id: int, **fields):
@@ -278,6 +292,10 @@ class Database:
         if not fields:
             return
         import json
+        with self.tx():
+            self._update_locked(order_id, row, fields, json)
+
+    def _update_locked(self, order_id, row, fields, json):
         self.con.execute("INSERT INTO order_versions (order_id, at, snapshot_json) VALUES (?, ?, ?)",
                          (order_id, _now(), json.dumps(dict(row), ensure_ascii=False)))
         sets = ", ".join(f"{k} = ?" for k in fields)
@@ -289,8 +307,11 @@ class Database:
         row = self._require(order_id)
         if row["status"] != "draft":
             raise OrderLocked("Зареєстрований наказ не видаляється (номер не можна звільнити).")
-        self._unindex(order_id)
-        self.con.execute("DELETE FROM orders WHERE id = ?", (order_id,))
+        with self.tx():
+            self._unindex(order_id)
+            self.con.execute("DELETE FROM attachments WHERE order_id = ?", (order_id,))
+            self.con.execute("DELETE FROM order_versions WHERE order_id = ?", (order_id,))
+            self.con.execute("DELETE FROM orders WHERE id = ?", (order_id,))
 
     def register(self, order_id: int, date: str | None = None) -> str:
         """Видає наступний номер у межах виду й календарного року (р. III п. 1)."""
@@ -322,11 +343,11 @@ class Database:
                 "UPDATE orders SET number = ?, reg_index = ?, date = ?, year = ?, status = 'registered', "
                 "updated_at = ? WHERE id = ?", (number, idx, date, year, _now(), order_id))
             self._audit(order_id, "register", idx)
+            self._reindex(order_id)
             self.con.execute("COMMIT")
-        except Exception:
+        except BaseException:
             self.con.execute("ROLLBACK")
             raise
-        self._reindex(order_id)
         return idx
 
     def cancel(self, order_id: int, reason: str):
@@ -335,9 +356,10 @@ class Database:
         if row["status"] != "registered":
             raise RegistrationError("Скасувати можна лише зареєстрований наказ.")
         note = (row["notes"] + "\n" if row["notes"] else "") + f"Скасовано: {reason}"
-        self.con.execute("UPDATE orders SET status = 'cancelled', notes = ?, updated_at = ? WHERE id = ?",
-                         (note, _now(), order_id))
-        self._audit(order_id, "cancel", reason)
+        with self.tx():
+            self.con.execute("UPDATE orders SET status = 'cancelled', notes = ?, updated_at = ? WHERE id = ?",
+                             (note, _now(), order_id))
+            self._audit(order_id, "cancel", reason)
 
     def create_amendment(self, order_id: int) -> int:
         """Чернетка наказу «Про внесення змін…» до зареєстрованого наказу (р. III п. 1)."""
@@ -386,7 +408,9 @@ _EDITABLE = {"type_name", "template_id", "date", "title", "body_html", "basis", 
 
 
 def _fts_query(q: str) -> str:
-    words = [w.replace('"', "") for w in q.replace("'", " ").replace("’", " ").split() if w.strip('"')]
+    import re
+    q = re.sub(r"[^\w\s]", " ", q)  # лише літери й цифри: спецсимволи FTS5 не ламають пошук
+    words = [w for w in q.split() if w]
     return " ".join(f'"{w}"*' for w in words) or '""'
 
 
