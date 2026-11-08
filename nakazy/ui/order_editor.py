@@ -115,6 +115,8 @@ class OrderEditor(EditorWindow):
         self.warn = QLabel(); self.warn.setWordWrap(True); f.addRow(self.warn)
         save = QPushButton("Зберегти в базу (Ctrl+S)"); save.clicked.connect(self.save_order)
         save.setEnabled(not self.readonly); f.addRow(save)
+        exp = QPushButton("Зберегти наказ у DOCX/PDF (з бланком)"); exp.clicked.connect(self.export_order)
+        f.addRow(exp)
         dock = QDockWidget("Реквізити наказу", self); dock.setWidget(w)
         dock.setFeatures(QDockWidget.DockWidgetMovable)
         self.addDockWidget(Qt.RightDockWidgetArea, dock)
@@ -172,6 +174,19 @@ class OrderEditor(EditorWindow):
         self.setWindowTitle(f"{self.title_e.text()} · Накази ШКОЛА")
         self.statusBar().showMessage("Збережено в базу")
         self._check(); self.saved.emit(self.order_id)
+
+    def export_order(self):
+        if not self.readonly and self.edit.document().isModified():
+            self.save_order()
+        from ..export import export_docx, export_pdf
+        path, _ = QFileDialog.getSaveFileName(self, "Зберегти наказ", self.title_e.text()[:60], "PDF (*.pdf);;Word (*.docx)")
+        if not path:
+            return
+        try:
+            (export_docx if path.lower().endswith(".docx") else export_pdf)(self.db, self.order_id, path)
+            self.statusBar().showMessage(f"Збережено: {path}")
+        except Exception as e:
+            QMessageBox.warning(self, "Накази ШКОЛА", str(e))
 
     def save(self):  # Ctrl+S у стрічці InterText
         self.save_order()

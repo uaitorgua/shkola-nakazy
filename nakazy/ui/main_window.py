@@ -46,7 +46,7 @@ class MainWindow(QMainWindow):
         bar = QHBoxLayout()
         for text, slot in (("Новий наказ", self.new_order), ("Відкрити", self.edit_current),
                            ("Зареєструвати", self.register_current), ("Наказ про зміни", self.amend_current),
-                           ("Скасувати", self.cancel_current), ("Журнал…", self.export_journal), ("Перевірка", self.run_audit),
+                           ("Скасувати", self.cancel_current), ("Зберегти DOCX/PDF…", self.export_current), ("Журнал…", self.export_journal), ("Перевірка", self.run_audit),
                            ("Заклад…", self.settings)):
             b = QPushButton(text); b.clicked.connect(slot); bar.addWidget(b)
         bar.addStretch()
@@ -220,16 +220,22 @@ class MainWindow(QMainWindow):
         QMessageBox.warning(self, "Перевірка реєстру", f"Знайдено: {len(found)}\n\n{text[:4000]}")
 
     def settings(self):
-        dlg = QDialog(self); dlg.setWindowTitle("Заклад")
-        f = QFormLayout(dlg)
-        school = QLineEdit(self.db.get_setting("school")); head = QLineEdit(self.db.get_setting("head"))
-        f.addRow("Повна назва закладу", school); f.addRow("Керівник (Власне ім'я ПРІЗВИЩЕ)", head)
-        bb = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
-        bb.accepted.connect(dlg.accept); bb.rejected.connect(dlg.reject); f.addRow(bb)
-        if dlg.exec():
-            self.db.set_setting("school", school.text().strip()); self.db.set_setting("head", head.text().strip())
+        from .settings_dialog import SettingsDialog
+        if SettingsDialog(self, self.db).exec():
             self.show_current()
 
+    def export_current(self):
+        r = self.current_row()
+        if not r:
+            return
+        from ..export import export_docx, export_pdf
+        name = f"Наказ {r['reg_index'] or 'чернетка'} {r['date'] or ''}".strip().replace("/", "-")
+        path, flt = QFileDialog.getSaveFileName(self, "Зберегти наказ", name, "PDF (*.pdf);;Word (*.docx)")
+        if not path:
+            return
+        fn = export_docx if path.lower().endswith(".docx") else export_pdf
+        if self._try(lambda: fn(self.db, r["id"], path)):
+            self.statusBar().showMessage(f"Збережено: {path}", 8000)
 
 def run():
     import sys
