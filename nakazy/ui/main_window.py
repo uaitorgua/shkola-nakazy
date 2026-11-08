@@ -247,8 +247,9 @@ class MainWindow(QMainWindow):
         if self._try(lambda: fn(self.db, r["id"], path)):
             self.statusBar().showMessage(f"Збережено: {path}", 8000)
 
+
 def _setup_log():
-    """Журнал %APPDATA%\nakazy-shkola\nakazy.log: необроблені помилки пишуться туди й показуються користувачу."""
+    """Журнал %APPDATA%/nakazy-shkola/nakazy.log: необроблені помилки пишуться туди й показуються користувачу."""
     import logging
     import os
     import sys
@@ -261,8 +262,7 @@ def _setup_log():
     def hook(tp, val, tb):
         logging.error("Необроблена помилка", exc_info=(tp, val, tb))
         try:
-            QMessageBox.critical(None, "Накази ШКОЛА", f"Сталася помилка: {val}
-Деталі в журналі: {path}")
+            QMessageBox.critical(None, "Накази ШКОЛА", f"Сталася помилка: {val}\nДеталі в журналі: {path}")
         except Exception:
             pass
     sys.excepthook = hook
