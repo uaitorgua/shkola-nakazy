@@ -10,3 +10,6 @@
 - Коміт і START.md після кожного кроку; тексти без довгих тире.
 - Важкі збірки на Mac через чергу. Сервер, «Вектор», листи не чіпати.
 - Норми подавати лише з першоджерелом (див. PLAN.md, розд. 1).
+
+## Репозиторій
+- Публічний: github.com/uaitorgua/shkola-nakazy (створити: GitHub тимчасово відмовив 08.11 «too many repositories, too quickly», повторити пізніше: `gh repo create uaitorgua/shkola-nakazy --public --source . --push`).
