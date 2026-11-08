@@ -9,7 +9,7 @@ import os
 import sqlite3
 from dataclasses import dataclass
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 @dataclass(frozen=True)
@@ -44,6 +44,8 @@ CREATE TABLE IF NOT EXISTS orders (
     date TEXT,
     year INTEGER,
     title TEXT NOT NULL DEFAULT '',
+    type_name TEXT NOT NULL DEFAULT '',
+    template_id TEXT NOT NULL DEFAULT '',
     body_html TEXT NOT NULL DEFAULT '',
     basis TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'draft',
@@ -121,7 +123,14 @@ class Database:
         self.con.execute("PRAGMA foreign_keys = ON")
         self.con.execute("PRAGMA journal_mode = WAL")
         self.con.executescript(_SCHEMA)
-        self.con.execute("INSERT OR IGNORE INTO meta VALUES ('schema_version', ?)", (str(SCHEMA_VERSION),))
+        self._migrate()
+
+    def _migrate(self):
+        cols = {r[1] for r in self.con.execute("PRAGMA table_info(orders)")}
+        for col in ("type_name", "template_id"):  # v1 -> v2
+            if col not in cols:
+                self.con.execute(f"ALTER TABLE orders ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
+        self.con.execute("INSERT OR REPLACE INTO meta VALUES ('schema_version', ?)", (str(SCHEMA_VERSION),))
 
     def _backup_before_migration(self):
         """Оновлення програми не руйнує базу: перед зміною схеми робиться копія."""
@@ -207,7 +216,7 @@ class Database:
         return self.con.execute("SELECT * FROM orders WHERE id = ?", (order_id,)).fetchone()
 
     def list_orders(self, kind: str | None = None, year: int | None = None,
-                    status: str | None = None, query: str = "") -> list[sqlite3.Row]:
+                    status: str | None = None, query: str = "", type_name: str | None = None) -> list[sqlite3.Row]:
         sql, args = "SELECT * FROM orders WHERE 1=1", []
         if kind:
             sql += " AND kind = ?"; args.append(kind)
@@ -215,6 +224,8 @@ class Database:
             sql += " AND (year = ? OR (status = 'draft' AND year IS NULL))"; args.append(year)
         if status:
             sql += " AND status = ?"; args.append(status)
+        if type_name is not None:
+            sql += " AND type_name = ?"; args.append(type_name)
         if query.strip():
             sql += " AND id IN (SELECT rowid FROM orders_fts WHERE orders_fts MATCH ?)"
             args.append(_fts_query(query))
@@ -225,6 +236,11 @@ class Database:
         rows = self.con.execute(
             "SELECT kind, COUNT(*) c FROM orders WHERE year = ? AND status != 'draft' GROUP BY kind", (year,))
         return {r["kind"]: r["c"] for r in rows}
+
+    def type_counts(self, year: int) -> dict[tuple[str, str], int]:
+        rows = self.con.execute("SELECT kind, type_name, COUNT(*) c FROM orders WHERE year = ? "
+                                "AND status != 'draft' GROUP BY kind, type_name", (year,))
+        return {(r["kind"], r["type_name"]): r["c"] for r in rows}
 
     def years(self) -> list[int]:
         ys = {r[0] for r in self.con.execute("SELECT DISTINCT year FROM orders WHERE year IS NOT NULL")}
@@ -365,7 +381,7 @@ class Database:
         self.con.execute("INSERT INTO _fts_cache VALUES (?, ?, ?, ?)", (oid, *vals))
 
 
-_EDITABLE = {"date", "title", "body_html", "basis", "signer", "signer_acting", "controller",
+_EDITABLE = {"type_name", "template_id", "date", "title", "body_html", "basis", "signer", "signer_acting", "controller",
              "responsible", "notes", "amends_order_id"}
 
 

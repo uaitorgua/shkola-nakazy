@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#2b3fb8"/><stop offset="1" stop-color="#1b1f8a"/></linearGradient></defs>
+<rect x="8" y="8" width="240" height="240" rx="52" fill="url(#g)"/>
+<!-- аркуш + золота лінія сканування -->
+<path d="M84 52 h64 l36 36 v116 a10 10 0 0 1 -10 10 h-90 a10 10 0 0 1 -10 -10 v-142 a10 10 0 0 1 10 -10 z" fill="#fff"/>
+<path d="M148 52 v28 a8 8 0 0 0 8 8 h28" fill="none" stroke="#1b1f8a" stroke-width="8" stroke-linejoin="round" opacity=".25"/>
+<rect x="44" y="130" width="168" height="16" rx="8" fill="#19c3b0"/>
+</svg>

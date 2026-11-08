@@ -13,62 +13,10 @@ from PySide6.QtWidgets import (
 
 from ..db import KINDS, KIND_BY_CODE, STATUS_TITLES, Database, check_structure, format_date
 from ..journal import export_journal_docx
+from .order_editor import OrderEditor, TemplatePicker, create_from_template
 from .theme import STYLE
 
 ROLE = Qt.UserRole
-
-
-class OrderDialog(QDialog):
-    def __init__(self, parent, db: Database, row=None, kind="osn"):
-        super().__init__(parent)
-        self.setWindowTitle("Наказ (чернетка)")
-        self.resize(760, 640)
-        self.kind = QComboBox()
-        for k in KINDS:
-            self.kind.addItem(k.title, k.code)
-        self.date = QDateEdit(QDate.currentDate()); self.date.setCalendarPopup(True)
-        self.date.setDisplayFormat("dd.MM.yyyy")
-        self.title = QLineEdit("Про ")
-        self.basis = QLineEdit()
-        self.signer = QLineEdit(db.get_setting("head"))
-        self.acting = QCheckBox("в. о. керівника")
-        self.controller = QLineEdit()
-        self.responsible = QLineEdit()
-        self.notes = QLineEdit()
-        self.body = QTextEdit()
-        self.body.setAcceptRichText(True)
-        self.body.setHtml("<p>Відповідно до …, з метою …</p><p>НАКАЗУЮ:</p><p>1. …</p>"
-                          "<p>2. Контроль за виконанням наказу залишаю за собою.</p>")
-        form = QFormLayout()
-        for label, w in (("Вид", self.kind), ("Дата", self.date), ("Заголовок", self.title),
-                         ("Підстава", self.basis), ("Підписує", self.signer), ("", self.acting),
-                         ("Контроль", self.controller), ("Відповідальні", self.responsible),
-                         ("Примітки", self.notes)):
-            form.addRow(label, w)
-        lay = QVBoxLayout(self)
-        lay.addLayout(form)
-        lay.addWidget(QLabel("Текст наказу (повний редактор InterText – етап 2):"))
-        lay.addWidget(self.body, 1)
-        bb = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
-        bb.accepted.connect(self.accept); bb.rejected.connect(self.reject)
-        lay.addWidget(bb)
-        if row is not None:
-            self.kind.setCurrentIndex(self.kind.findData(row["kind"]))
-            if row["date"]:
-                self.date.setDate(QDate.fromString(row["date"], "yyyy-MM-dd"))
-            self.title.setText(row["title"]); self.basis.setText(row["basis"])
-            self.signer.setText(row["signer"]); self.acting.setChecked(bool(row["signer_acting"]))
-            self.controller.setText(row["controller"]); self.responsible.setText(row["responsible"])
-            self.notes.setText(row["notes"]); self.body.setHtml(row["body_html"])
-        else:
-            self.kind.setCurrentIndex(self.kind.findData(kind))
-
-    def values(self) -> dict:
-        return dict(kind=self.kind.currentData(), date=self.date.date().toString("yyyy-MM-dd"),
-                    title=self.title.text().strip(), basis=self.basis.text().strip(),
-                    signer=self.signer.text().strip(), signer_acting=int(self.acting.isChecked()),
-                    controller=self.controller.text().strip(), responsible=self.responsible.text().strip(),
-                    notes=self.notes.text().strip(), body_html=self.body.toHtml())
 
 
 class MainWindow(QMainWindow):
@@ -96,7 +44,7 @@ class MainWindow(QMainWindow):
         self.list.itemDoubleClicked.connect(lambda *_: self.edit_current())
         mid = QWidget(); ml = QVBoxLayout(mid); ml.setContentsMargins(6, 6, 6, 6)
         bar = QHBoxLayout()
-        for text, slot in (("Новий наказ", self.new_order), ("Редагувати", self.edit_current),
+        for text, slot in (("Новий наказ", self.new_order), ("Відкрити", self.edit_current),
                            ("Зареєструвати", self.register_current), ("Наказ про зміни", self.amend_current),
                            ("Скасувати", self.cancel_current), ("Журнал…", self.export_journal),
                            ("Заклад…", self.settings)):
@@ -127,14 +75,24 @@ class MainWindow(QMainWindow):
         total = sum(counts.values())
         items = [QTreeWidgetItem([f"Усі накази ({total})"])]
         items[0].setData(0, ROLE, ("all", None))
+        tcounts = self.db.type_counts(year)
+        expanded = {self.side.topLevelItem(i).data(0, ROLE) for i in range(self.side.topLevelItemCount())
+                    if self.side.topLevelItem(i).isExpanded()}
+        children = []
         for k in KINDS:
             suffix = f" (-{k.suffix})" if k.suffix else ""
             it = QTreeWidgetItem([f"{k.title}{suffix}: {counts.get(k.code, 0)}"])
             it.setData(0, ROLE, ("kind", k.code)); items.append(it)
+            types = [tn for (kc, tn) in tcounts if kc == k.code]
+            for tn in sorted(types, key=lambda x: (x == "", x)):
+                ch = QTreeWidgetItem([f"{tn or 'Без типу'}: {tcounts[(k.code, tn)]}"])
+                ch.setData(0, ROLE, ("type", (k.code, tn))); it.addChild(ch); children.append(ch)
         drafts = QTreeWidgetItem([f"Чернетки ({len(self.db.list_orders(status='draft'))})"])
         drafts.setData(0, ROLE, ("draft", None)); items.append(drafts)
         self.side.addTopLevelItems(items)
         for it in items:
+            it.setExpanded(it.data(0, ROLE) in expanded)
+        for it in items + children:
             if it.data(0, ROLE) == sel:
                 self.side.setCurrentItem(it)
         if not self.side.currentItem():
@@ -145,7 +103,10 @@ class MainWindow(QMainWindow):
     def reload_list(self):
         it = self.side.currentItem()
         mode, code = it.data(0, ROLE) if it else ("all", None)
-        rows = self.db.list_orders(kind=code if mode == "kind" else None,
+        tname = None
+        if mode == "type":
+            code, tname = code
+        rows = self.db.list_orders(kind=code if mode in ("kind", "type") else None, type_name=tname,
                                    year=None if mode == "draft" else self.year.currentData(),
                                    status="draft" if mode == "draft" else None,
                                    query=self.search.text())
@@ -187,22 +148,24 @@ class MainWindow(QMainWindow):
     def new_order(self):
         it = self.side.currentItem()
         mode, code = it.data(0, ROLE) if it else ("all", None)
-        dlg = OrderDialog(self, self.db, kind=code if mode == "kind" else "osn")
+        kind = code[0] if mode == "type" else (code if mode == "kind" else None)
+        dlg = TemplatePicker(self, kind)
         if dlg.exec():
-            v = dlg.values(); kind = v.pop("kind")
-            self._try(lambda: self.db.create_draft(kind, **v)); self.refresh()
+            oid = self._try(lambda: create_from_template(self.db, dlg.template_id, dlg.values(), kind or "osn"))
+            self.refresh()
+            if oid:
+                self.open_editor(oid)
+
+    def open_editor(self, oid: int):
+        ed = OrderEditor(self.db, oid, self)
+        ed.saved.connect(lambda _id: self.refresh())
+        ed.show()
 
     def edit_current(self):
         r = self.current_row()
         if not r:
             return
-        if r["status"] != "draft":
-            QMessageBox.information(self, "Накази ШКОЛА", "Зареєстрований наказ не змінюється. "
-                                    "Створіть «Наказ про зміни» (Інструкція МОН № 676, р. III п. 1).")
-            return
-        dlg = OrderDialog(self, self.db, row=r)
-        if dlg.exec():
-            self._try(lambda: self.db.update_draft(r["id"], **dlg.values())); self.refresh()
+        self.open_editor(r["id"])
 
     def register_current(self):
         r = self.current_row()
@@ -221,7 +184,9 @@ class MainWindow(QMainWindow):
     def amend_current(self):
         r = self.current_row()
         if r and r["status"] != "draft":
-            self._try(lambda: self.db.create_amendment(r["id"])); self.refresh()
+            oid = self._try(lambda: self.db.create_amendment(r["id"])); self.refresh()
+            if oid:
+                self.open_editor(oid)
 
     def cancel_current(self):
         r = self.current_row()
