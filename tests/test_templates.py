@@ -1,4 +1,5 @@
 import os
+import re
 import sqlite3
 import sys
 import tempfile
@@ -24,7 +25,7 @@ class TemplatesTest(unittest.TestCase):
             row = {"title": title, "body_html": body, "signer": "x"}
             self.assertEqual([p for p in check_structure(row) if p.startswith("!")], [])
             for k, _ in t.fields:
-                self.assertTrue(f"{{{k}}}" in t.title + t.preamble + "".join(t.items), f"{t.id}: {k}")
+                self.assertTrue(re.search(r"\{" + k + r"(\.\w+)?\}", t.title + t.preamble + "".join(t.items)), f"{t.id}: {k}")
 
     def test_migration_v1(self):
         d = tempfile.mkdtemp(); path = os.path.join(d, "old.db")

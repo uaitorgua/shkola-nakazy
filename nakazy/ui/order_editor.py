@@ -17,8 +17,13 @@ from ..templates import TEMPLATE_BY_ID, TEMPLATES, render
 class TemplatePicker(QDialog):
     """Вибір шаблону (вид → тип → шаблон) і заповнення полів."""
 
-    def __init__(self, parent, kind: str | None = None):
+    PERSON_KEYS = {"pupil": "pupil", "employee": "staff"}
+
+    def __init__(self, parent, kind: str | None = None, db: Database | None = None):
         super().__init__(parent)
+        self.db = db
+        self.person_vals: dict[str, dict] = {}
+        self.persons: dict[str, int] = {}
         self.setWindowTitle("Новий наказ за шаблоном")
         self.resize(900, 600)
         self.tree = QTreeWidget(); self.tree.setHeaderHidden(True)
@@ -56,8 +61,24 @@ class TemplatePicker(QDialog):
             self.info.setText(f"<b>{KIND_BY_CODE[t.kind].title}</b> · {t.type}<br>"
                               f"Нормативна підстава (орієнтир): {t.basis or '–'}"
                               + (f"<br>Додатки: {', '.join(t.attachments)}" if t.attachments else ""))
+            self.person_vals, self.persons = {}, {}
             for key, label in t.fields:
-                e = QLineEdit(); f.addRow(label, e); self.edits[key] = e
+                e = QLineEdit(); self.edits[key] = e
+                if key in self.PERSON_KEYS and self.db is not None:
+                    row = QHBoxLayout(); row.addWidget(e, 1)
+                    cb = QComboBox(); cb.setEditable(True); cb.setMinimumWidth(220)
+                    cb.lineEdit().setPlaceholderText("вибрати з довідника…")
+                    from ..people import People
+                    cb.addItem("", None)
+                    for p in People(self.db).find(self.PERSON_KEYS[key]):
+                        extra = p["cls"] or p["position"]
+                        cb.addItem(f"{p['last']} {p['first']} {p['middle']}" + (f" ({extra})" if extra else ""), p["id"])
+                    cb.setInsertPolicy(QComboBox.NoInsert)
+                    cb.completer().setFilterMode(Qt.MatchContains)
+                    cb.activated.connect(lambda i, k=key, c=cb: self._pick_person(k, c.itemData(i)))
+                    row.addWidget(cb); f.addRow(label, row)
+                else:
+                    f.addRow(label, e)
         else:
             self.info.setText("Порожня чернетка." if tid == "" else "Оберіть шаблон ліворуч.")
         self.form_host.setWidget(w)
@@ -68,8 +89,26 @@ class TemplatePicker(QDialog):
             return
         self.accept()
 
+    def _pick_person(self, key: str, pid):
+        if pid is None:
+            return
+        from ..people import People, person_values
+        ppl = People(self.db)
+        vals = person_values(ppl, ppl.get(pid), key)
+        self.person_vals[key], self.persons[key] = vals, pid
+        self.edits[key].setText(vals[key])
+        for k, v in vals.items():  # клас, дата народження, посада
+            if "." not in k and k != key and k in self.edits and not self.edits[k].text().strip():
+                self.edits[k].setText(v)
+
     def values(self) -> dict[str, str]:
-        return {k: e.text().strip() for k, e in self.edits.items()}
+        out = {k: e.text().strip() for k, e in self.edits.items()}
+        for key, vals in self.person_vals.items():
+            if out.get(key) == vals[key]:  # не змінено вручну: беремо відмінки з довідника
+                out.update({k: v for k, v in vals.items() if "." in k})
+            else:
+                self.persons.pop(key, None)
+        return out
 
 
 class OrderEditor(EditorWindow):
@@ -202,7 +241,8 @@ class OrderEditor(EditorWindow):
         e.accept()
 
 
-def create_from_template(db: Database, template_id: str, values: dict[str, str], kind: str = "osn") -> int:
+def create_from_template(db: Database, template_id: str, values: dict[str, str], kind: str = "osn",
+                         persons: dict[str, int] | None = None) -> int:
     if not template_id:
         return db.create_draft(kind, title="Про ", body_html="<p>…</p><p>НАКАЗУЮ:</p><p>1. …</p>",
                                signer=db.get_setting("head"))
@@ -210,6 +250,13 @@ def create_from_template(db: Database, template_id: str, values: dict[str, str],
     title, body = render(t, values)
     oid = db.create_draft(t.kind, title=title, body_html=body, type_name=t.type, template_id=t.id,
                           basis=t.basis, signer=db.get_setting("head"))
+    from ..people import People
+    ppl = People(db)
+    for key, pid in (persons or {}).items():
+        ppl.link(oid, pid, key)
     for a in t.attachments:
-        db.add_attachment(oid, a)
+        body = ""
+        if a.startswith("Список учнів") and values.get("cls") and ppl.find("pupil", cls=values["cls"]):
+            body = ppl.class_list_html(values["cls"])
+        db.add_attachment(oid, a, body_html=body)
     return oid

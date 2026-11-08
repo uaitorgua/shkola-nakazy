@@ -46,7 +46,7 @@ class MainWindow(QMainWindow):
         bar = QHBoxLayout()
         for text, slot in (("Новий наказ", self.new_order), ("Відкрити", self.edit_current),
                            ("Зареєструвати", self.register_current), ("Наказ про зміни", self.amend_current),
-                           ("Скасувати", self.cancel_current), ("Зберегти DOCX/PDF…", self.export_current), ("Журнал…", self.export_journal), ("Перевірка", self.run_audit),
+                           ("Скасувати", self.cancel_current), ("Зберегти DOCX/PDF…", self.export_current), ("Журнал…", self.export_journal), ("Перевірка", self.run_audit), ("Люди…", self.open_people),
                            ("Заклад…", self.settings)):
             b = QPushButton(text); b.clicked.connect(slot); bar.addWidget(b)
         bar.addStretch()
@@ -153,9 +153,10 @@ class MainWindow(QMainWindow):
         it = self.side.currentItem()
         mode, code = it.data(0, ROLE) if it else ("all", None)
         kind = code[0] if mode == "type" else (code if mode == "kind" else None)
-        dlg = TemplatePicker(self, kind)
+        dlg = TemplatePicker(self, kind, self.db)
         if dlg.exec():
-            oid = self._try(lambda: create_from_template(self.db, dlg.template_id, dlg.values(), kind or "osn"))
+            vals = dlg.values()
+            oid = self._try(lambda: create_from_template(self.db, dlg.template_id, vals, kind or "osn", dlg.persons))
             self.refresh()
             if oid:
                 self.open_editor(oid)
@@ -218,6 +219,10 @@ class MainWindow(QMainWindow):
             return
         text = "\n".join(f"[{lvl}] {t}" for lvl, t in found)
         QMessageBox.warning(self, "Перевірка реєстру", f"Знайдено: {len(found)}\n\n{text[:4000]}")
+
+    def open_people(self):
+        from .people_window import PeopleWindow
+        self._people = PeopleWindow(self.db, self); self._people.show()
 
     def settings(self):
         from .settings_dialog import SettingsDialog

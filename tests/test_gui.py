@@ -40,7 +40,7 @@ class Secretary(unittest.TestCase):
     def test_day_of_secretary(self):
         # 1. новий наказ за шаблоном через майстер
         class Picker:
-            def __init__(s, *a): s.template_id = "u_enroll"
+            def __init__(s, *a): s.template_id = "u_enroll"; s.persons = {}
             def exec(s): return True
             def values(s): return {"pupil": "Іваненка Петра Олеговича", "cls": "5-А", "birth": "01.02.2015",
                                    "from_date": "03.11.2026", "application": "заяви матері від 01.11.2026"}

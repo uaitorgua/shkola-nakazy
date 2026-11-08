@@ -10,7 +10,7 @@ import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 @dataclass(frozen=True)
@@ -65,6 +65,26 @@ CREATE TABLE IF NOT EXISTS audit (
 CREATE VIRTUAL TABLE IF NOT EXISTS orders_fts USING fts5(
     reg_index, title, body, content='', tokenize='unicode61 remove_diacritics 0');
 CREATE TABLE IF NOT EXISTS _fts_cache (id INTEGER PRIMARY KEY, reg_index, title, body);
+CREATE TABLE IF NOT EXISTS people (
+    id INTEGER PRIMARY KEY,
+    kind TEXT NOT NULL,                 -- 'pupil' | 'staff'
+    last TEXT NOT NULL, first TEXT NOT NULL DEFAULT '', middle TEXT NOT NULL DEFAULT '',
+    birth TEXT, sex TEXT NOT NULL DEFAULT '',
+    forms_json TEXT NOT NULL DEFAULT '{}',   -- відмінки, виправлені вручну
+    status TEXT NOT NULL DEFAULT 'active',   -- active | left
+    cls TEXT NOT NULL DEFAULT '', case_no TEXT NOT NULL DEFAULT '', enrolled TEXT,
+    position TEXT NOT NULL DEFAULT '', rate TEXT NOT NULL DEFAULT '', subjects TEXT NOT NULL DEFAULT '',
+    category TEXT NOT NULL DEFAULT '', employment TEXT NOT NULL DEFAULT '',
+    ext_id TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS people_name ON people(kind, last, first);
+CREATE TABLE IF NOT EXISTS classes (
+    school_year TEXT NOT NULL, name TEXT NOT NULL, teacher_id INTEGER REFERENCES people(id),
+    PRIMARY KEY (school_year, name));
+CREATE TABLE IF NOT EXISTS order_persons (
+    order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    person_id INTEGER NOT NULL REFERENCES people(id), role TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (order_id, person_id, role));
 CREATE TABLE IF NOT EXISTS order_versions (
     id INTEGER PRIMARY KEY, order_id INTEGER NOT NULL, at TEXT NOT NULL, snapshot_json TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS attachments (
@@ -310,6 +330,7 @@ class Database:
         with self.tx():
             self._unindex(order_id)
             self.con.execute("DELETE FROM attachments WHERE order_id = ?", (order_id,))
+            self.con.execute("DELETE FROM order_persons WHERE order_id = ?", (order_id,))
             self.con.execute("DELETE FROM order_versions WHERE order_id = ?", (order_id,))
             self.con.execute("DELETE FROM orders WHERE id = ?", (order_id,))
 
