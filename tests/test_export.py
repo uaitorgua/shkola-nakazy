@@ -77,6 +77,37 @@ class ExportTest(unittest.TestCase):
         self.assertIn("w:tblHeader", t.rows[0]._tr.xml)
         self.assertIn("w:cantSplit", t.rows[5]._tr.xml)
 
+    def test_dstu_details(self):
+        from docx.shared import Mm, Pt
+        from nakazy.export import dstu_signature
+        self.assertEqual(dstu_signature("Петренко Олена Іванівна"), "Олена ПЕТРЕНКО")
+        self.assertEqual(dstu_signature("Олена Петренко"), "Олена ПЕТРЕНКО")
+        self.db.set_setting("acquaint", "1")
+        oid = create_from_template(self.db, "o_attest", {})  # додатки затверджуються наказом
+        self.db.update_draft(oid, responsible="Іваненко Петро Олегович, Олена Коваль")
+        self.db.register(oid, "2026-11-08")
+        doc = build_docx(self.db, oid)
+        t = self.text(doc)
+        sig = next(p for p in doc.paragraphs if p.text.startswith("Директор	"))
+        self.assertEqual(round(sig.paragraph_format.tab_stops[0].position.mm), 125)
+        self.assertIn("З наказом ознайомлені:", t)
+        self.assertIn("Петро ІВАНЕНКО", t); self.assertIn("Олена КОВАЛЬ", t)
+        self.assertIn("ЗАТВЕРДЖЕНО", t); self.assertNotIn("Додаток 1", t)
+        grif = next(p for p in doc.paragraphs if p.text == "ЗАТВЕРДЖЕНО")
+        self.assertEqual(round(grif.paragraph_format.left_indent.mm), 100)
+        self.db.set_setting("grif_indent", "104")
+        grif = next(p for p in build_docx(self.db, oid).paragraphs if p.text == "ЗАТВЕРДЖЕНО")
+        self.assertEqual(round(grif.paragraph_format.left_indent.mm), 104)
+
+    def test_table_font_not_below_12(self):
+        from docx.shared import Pt
+        self.db.set_setting("font_size", "12")
+        oid = self.order()
+        for row in build_docx(self.db, oid).tables[0].rows[:3]:
+            for c in row.cells:
+                for r in c.paragraphs[0].runs:
+                    self.assertGreaterEqual(r.font.size, Pt(12))
+
     def test_image_blank(self):
         self.db.save_blank("і", "image", png(), {"width_mm": 170, "has_nakaz": False})
         oid = self.order()

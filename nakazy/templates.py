@@ -36,6 +36,7 @@ class Template:
     fields: list[tuple[str, str]] = field(default_factory=list)
     basis: str = ""           # нормативна підстава (орієнтир)
     attachments: list[str] = field(default_factory=list)  # назви додатків
+    approve: bool = False     # додатки затверджуються наказом: гриф «ЗАТВЕРДЖЕНО» (ДСТУ п. 5.16)
 
     def placeholders(self) -> list[tuple[str, str]]:
         return self.fields
@@ -286,3 +287,9 @@ def types_by_kind() -> dict[str, list[str]]:
         if t.type not in lst:
             lst.append(t.type)
     return out
+
+
+# документи, які наказ затверджує (план, графік, склад комісії, режим…)
+for _id in ("o_year_start", "o_attest", "o_attest_list", "o_qualification", "k_load", "o_duty", "o_olympiad",
+            "o_dpa", "o_pedrada"):
+    TEMPLATE_BY_ID[_id].approve = True

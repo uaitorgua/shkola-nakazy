@@ -174,13 +174,15 @@ class OrderEditor(EditorWindow):
         self.atts.clear()
         for a in self.db.attachments(self.order_id):
             src = "текст" if a["mode"] == "text" else (a["filename"] or "файл")
-            it = QListWidgetItem(f"Додаток {a['n']}. {a['title']} ({src})"); it.setData(Qt.UserRole, a["id"])
+            it = QListWidgetItem(f"{'ЗАТВЕРДЖЕНО' if a['approved'] else 'Додаток'} {a['n']}. {a['title']} ({src})"); it.setData(Qt.UserRole, a["id"])
             self.atts.addItem(it)
 
     def _add_text_att(self):
         t, ok = QInputDialog.getText(self, "Додаток", "Назва додатка:")
         if ok and t.strip():
-            self.db.add_attachment(self.order_id, t.strip()); self._reload_atts()
+            appr = QMessageBox.question(self, "Додаток", "Цей документ затверджується наказом "
+                                        "(план, графік, склад комісії)?\nТоді замість «Додаток N» буде гриф «ЗАТВЕРДЖЕНО».")
+            self.db.add_attachment(self.order_id, t.strip(), approved=appr == QMessageBox.Yes); self._reload_atts()
 
     def _add_file_att(self):
         path, _ = QFileDialog.getOpenFileName(self, "Файл додатка", "", "Документи (*.pdf *.docx *.xlsx *.png *.jpg)")
@@ -291,5 +293,5 @@ def create_from_template(db: Database, template_id: str, values: dict[str, str],
         body = ""
         if a.startswith("Список учнів") and values.get("cls") and ppl.find("pupil", cls=values["cls"]):
             body = ppl.class_list_html(values["cls"])
-        db.add_attachment(oid, a, body_html=body)
+        db.add_attachment(oid, a, body_html=body, approved=t.approve)
     return oid

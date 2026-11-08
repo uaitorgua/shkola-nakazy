@@ -126,7 +126,7 @@ def person_values(ppl: People, row, key: str) -> dict[str, str]:
     """Значення для шаблону: {key} – називний, {key.gen|dat|acc}, {key.role}, пов'язані поля."""
     f = ppl.forms(row)
     v = {key: f["nom"], f"{key}.gen": f["gen"], f"{key}.dat": f["dat"], f"{key}.acc": f["acc"],
-         f"{key}.short": f["short"]}
+         f"{key}.short": f["short"], f"{key}.sign": f"{row['first']} {row['last'].upper()}".strip()}
     fem = (row["sex"] or "") == "f"
     if row["kind"] == "pupil":
         v[f"{key}.role"] = "учениці" if fem else "учня"

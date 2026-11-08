@@ -3,10 +3,14 @@
 - A4, поля 30/10/20/20 мм, Times New Roman 12–14 (дод. 1 пп. 1–2);
 - бланк закладу лише на першій сторінці (зображення, готовий DOCX або текстовий з полів);
 - «НАКАЗ» великими (дод. 1 п. 3); дата, місце видання, номер; заголовок «Про…» без відступу;
-- підпис: посада ліворуч, розшифрування на рівні останнього рядка посади (дод. 1 п. 4);
+- підпис: посада ліворуч, «Власне ім'я ПРІЗВИЩЕ» з відступом 125 мм на рівні останнього рядка посади
+  (дод. 1 п. 4 № 676; ДСТУ 4163:2020 пп. 5.22, 7.7);
+- відмітка про ознайомлення (за налаштуванням): «З наказом ознайомлені:», підпис, ім'я, дата (ДСТУ п. 5.28);
 - перша сторінка без номера, далі номери вгорі по центру (дод. 1 п. 7);
 - додатки: кожен з нової сторінки, гриф «Додаток N до наказу … від … № …» праворуч
-  (група з наказом, р. VI п. 4; відступ грифа 100 мм, практика за ДСТУ 4163, не підтверджено);
+  (група з наказом, р. VI п. 4); відступ грифа 100 мм (ДСТУ п. 7.7) або інший з налаштувань;
+  документ, затверджений наказом, – гриф «ЗАТВЕРДЖЕНО / Наказ … / дата № …» (ДСТУ п. 5.16);
+- таблиці 12–14 пт, як і текст (дод. 1 п. 1 № 676);
 - вкладені файли-додатки: у PDF дописуються після наказу, у DOCX – перелік.
 """
 from __future__ import annotations
@@ -31,7 +35,18 @@ from .db import Database, format_date
 
 MARGINS = (30, 10, 20, 20)  # ліве, праве, верхнє, нижнє, мм (дод. 1 п. 2)
 TEXT_W = 210 - MARGINS[0] - MARGINS[1]
-GRIF_INDENT = 100  # мм від лівого поля
+GRIF_INDENT = 100  # мм від лівого поля (ДСТУ 4163:2020 п. 7.7)
+SIGN_INDENT = 125  # розшифрування підпису (ДСТУ п. 7.7)
+
+
+def dstu_signature(name: str) -> str:
+    """«Олена Петренко», «Петренко Олена Іванівна», «О. Петренко» → «Олена ПЕТРЕНКО» / «О. ПЕТРЕНКО» (ДСТУ п. 5.22)."""
+    parts = [p for p in name.replace(",", " ").split() if p]
+    if not parts:
+        return ""
+    if len(parts) >= 3 and not parts[0].endswith("."):  # Прізвище Ім'я По батькові
+        return f"{parts[1]} {parts[0].upper()}"
+    return " ".join(parts[:-1] + [parts[-1].upper()])
 
 
 def _html(fragment: str) -> str:
@@ -154,15 +169,20 @@ def build_docx(db: Database, order_id: int) -> Document:
     # 3) підпис (дод. 1 п. 4) і, за налаштуванням, ознайомлення
     position = ("В. о. директора" if o["signer_acting"] else db.get_setting("head_position", "Директор"))
     s = _para(doc, size=size, before=24)
-    s.paragraph_format.tab_stops.add_tab_stop(Mm(TEXT_W), WD_TAB_ALIGNMENT.RIGHT)
+    s.paragraph_format.tab_stops.add_tab_stop(Mm(SIGN_INDENT), WD_TAB_ALIGNMENT.LEFT)
     s.paragraph_format.keep_together = True
     _font(s.add_run(f"{position}\t{o['signer']}"), size)
     if db.get_setting("acquaint") == "1":
-        _para(doc, "З наказом ознайомлені:", size, before=18)
-        for name in [x.strip() for x in (o["responsible"] or "").split(",") if x.strip()] or ["", "", ""]:
-            q = _para(doc, size=size, before=6)
-            q.paragraph_format.tab_stops.add_tab_stop(Mm(TEXT_W), WD_TAB_ALIGNMENT.RIGHT)
-            _font(q.add_run(f"________________ {name}\t«___» ____________ 20___"), size)
+        # ДСТУ 4163:2020 п. 5.28: підпис, власне ім'я ПРІЗВИЩЕ, дата (власноручно), нижче реквізиту «Підпис»
+        s.paragraph_format.keep_with_next = True
+        names = [dstu_signature(x) for x in (o["responsible"] or "").split(",") if x.strip()]
+        _para(doc, "З наказом ознайомлені:", size, before=18).paragraph_format.keep_with_next = True
+        for name in names or ["", "", ""]:
+            q = _para(doc, size=size, before=8)
+            tabs = q.paragraph_format.tab_stops
+            tabs.add_tab_stop(Mm(45), WD_TAB_ALIGNMENT.LEFT)
+            tabs.add_tab_stop(Mm(TEXT_W), WD_TAB_ALIGNMENT.RIGHT)
+            _font(q.add_run(f"____________\t{name or '______________________'}\t____________"), size)
 
     # 4) номери сторінок з другої (дод. 1 п. 7)
     sec.different_first_page_header_footer = True
@@ -175,8 +195,11 @@ def build_docx(db: Database, order_id: int) -> Document:
         if a["mode"] == "file":
             files.append(a); continue
         br = _para(doc); br.add_run().add_break(WD_BREAK.PAGE)
-        for line in (f"Додаток {a['n']}", "до наказу", f"від {date} № {number}"):
-            _para(doc, line, size, indent_mm=GRIF_INDENT)
+        grif = float(db.get_setting("grif_indent", str(GRIF_INDENT)) or GRIF_INDENT)
+        lines = ([f"Додаток {a['n']}", "до наказу", f"від {date} № {number}"] if not a["approved"] else
+                 ["ЗАТВЕРДЖЕНО", f"Наказ {db.get_setting('head_genitive', 'директора')}", f"{date} № {number}"])
+        for line in lines:
+            _para(doc, line, size, indent_mm=grif)
         _para(doc, a["title"], size, True, WD_ALIGN_PARAGRAPH.CENTER, before=18, after=12)
         if (a["body_html"] or "").strip():
             sub = html_to_docx(_html(a["body_html"]))
@@ -197,7 +220,7 @@ def _tr_flag(row, tag):
 def format_tables(doc, size: int):
     """Таблиці: на всю ширину тексту, шапка жирна по центру й повторюється на кожній сторінці,
     рядок не розривається між сторінками, кегль на 2 менше за основний (не менше 10)."""
-    tsize = max(10, size - 2)
+    tsize = max(12, size - 2)  # не менше 12 пт: дод. 1 п. 1 № 676
     for t in doc.tables:
         t.style = "Table Grid"
         t.autofit = False

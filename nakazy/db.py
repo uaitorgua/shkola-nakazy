@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import datetime as dt
 import os
+import re
 import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -500,4 +501,6 @@ def check_structure(row) -> list[str]:
         out.append("Розпорядча частина має починатися словом «НАКАЗУЮ:» з нового рядка.")
     if not (row["signer"] or "").strip():
         out.append("!Не вказано, хто підписує наказ.")
+    elif not re.fullmatch(r"\S+ [А-ЯІЇЄҐA-Z'’ʼ-]{2,}", row["signer"].strip()):
+        out.append("Підпис за ДСТУ 4163:2020 п. 5.22: «Власне ім'я ПРІЗВИЩЕ» (напр. Олена ПЕТРЕНКО).")
     return out

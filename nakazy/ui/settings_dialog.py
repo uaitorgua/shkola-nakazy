@@ -24,12 +24,17 @@ class SettingsDialog(QDialog):
         self.school = QLineEdit(g("school")); self.city = QLineEdit(g("city"))
         self.head = QLineEdit(g("head")); self.head_pos = QLineEdit(g("head_position", "Директор"))
         self.size = QSpinBox(); self.size.setRange(12, 14); self.size.setValue(int(g("font_size", "14")))
-        self.acquaint = QCheckBox("Додавати «З наказом ознайомлені» (практика, у № 676 не вимагається)")
+        self.grif = QComboBox()
+        self.grif.addItem("100 мм – ДСТУ 4163:2020 п. 7.7", "100"); self.grif.addItem("104 мм – № 676, дод. 1 п. 6", "104")
+        self.grif.setCurrentIndex(max(0, self.grif.findData(g("grif_indent", "100"))))
+        self.head_gen = QLineEdit(g("head_genitive", "директора"))
+        self.acquaint = QCheckBox("Додавати «З наказом ознайомлені:» (ДСТУ 4163:2020 п. 5.28)")
         self.acquaint.setChecked(g("acquaint") == "1")
         top = QFormLayout()
         for label, w in (("Повна назва закладу", self.school), ("Населений пункт", self.city),
                          ("Керівник (Власне ім'я ПРІЗВИЩЕ)", self.head), ("Посада керівника", self.head_pos),
-                         ("Кегль тексту (дод. 1: 12–14)", self.size)):
+                         ("Кегль тексту (дод. 1: 12–14)", self.size), ("Відступ грифа додатка", self.grif),
+                         ("У грифі «ЗАТВЕРДЖЕНО Наказ …»", self.head_gen)):
             top.addRow(label, w)
         top.addRow(self.acquaint)
 
@@ -76,7 +81,8 @@ class SettingsDialog(QDialog):
     def _save(self):
         for k, v in (("school", self.school.text()), ("city", self.city.text()), ("head", self.head.text()),
                      ("head_position", self.head_pos.text()), ("font_size", str(self.size.value())),
-                     ("acquaint", "1" if self.acquaint.isChecked() else "0")):
+                     ("acquaint", "1" if self.acquaint.isChecked() else "0"), ("grif_indent", self.grif.currentData()),
+                     ("head_genitive", self.head_gen.text())):
             self.db.set_setting(k, v.strip())
         mode = self.mode.currentData()
         fields = {"owner": self.owner.text().strip(), "school": self.bschool.text().strip(),
