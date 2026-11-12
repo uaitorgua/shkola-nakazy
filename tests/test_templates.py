@@ -27,6 +27,14 @@ class TemplatesTest(unittest.TestCase):
             for k, _ in t.fields:
                 self.assertTrue(re.search(r"\{" + k + r"(\.\w+)?\}", t.title + t.preamble + "".join(t.items)), f"{t.id}: {k}")
 
+    def test_search(self):
+        from nakazy.templates import search
+        self.assertEqual([t.id for t in search("*харч*")], ["o_food"])
+        self.assertIn("v_annual", [t.id for t in search("ВІДПУСТК щоріч")])
+        self.assertIn("u_enroll", [t.id for t in search("зарахув")])
+        self.assertEqual(search("ксилофон"), [])
+        self.assertEqual(len(search("")), len(TEMPLATES))
+
     def test_migration_v1(self):
         d = tempfile.mkdtemp(); path = os.path.join(d, "old.db")
         con = sqlite3.connect(path)

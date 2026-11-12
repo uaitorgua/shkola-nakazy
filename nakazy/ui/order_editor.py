@@ -49,13 +49,44 @@ class TemplatePicker(QDialog):
         self.form_host = QScrollArea(); self.form_host.setWidgetResizable(True)
         self.info = QLabel(); self.info.setWordWrap(True)
         right = QWidget(); rl = QVBoxLayout(right); rl.addWidget(self.info); rl.addWidget(self.form_host, 1)
-        lay = QHBoxLayout(); lay.addWidget(self.tree, 1); lay.addWidget(right, 1)
+        self.search = QLineEdit(); self.search.setPlaceholderText("Пошук шаблону: харч, відпустк, зарахув…")
+        self.search.setClearButtonEnabled(True)
+        self.search.textChanged.connect(self.filter)
+        left = QWidget(); lv = QVBoxLayout(left); lv.setContentsMargins(0, 0, 0, 0)
+        lv.addWidget(self.search); lv.addWidget(self.tree, 1)
+        lay = QHBoxLayout(); lay.addWidget(left, 1); lay.addWidget(right, 1)
         bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         bb.button(QDialogButtonBox.Ok).setText("Створити")
         bb.accepted.connect(self._accept); bb.rejected.connect(self.reject)
         v = QVBoxLayout(self); v.addLayout(lay, 1); v.addWidget(bb)
         self.edits: dict[str, QLineEdit] = {}
         self.template_id: str | None = None
+
+    def filter(self, text: str):
+        """Ховає шаблони, що не відповідають запиту; групи без збігів теж ховаються."""
+        from ..templates import search
+        ids = {t.id for t in search(text)}
+        q = bool(text.strip())
+        first = None
+        for i in range(self.tree.topLevelItemCount()):
+            top = self.tree.topLevelItem(i)
+            if top.childCount() == 0:          # «Порожній наказ»
+                top.setHidden(q); continue
+            any_top = False
+            for g in range(top.childCount()):
+                grp = top.child(g); any_grp = False
+                for j in range(grp.childCount()):
+                    it = grp.child(j); ok = it.data(0, Qt.UserRole) in ids
+                    it.setHidden(not ok); any_grp |= ok
+                    if ok and first is None:
+                        first = it
+                grp.setHidden(not any_grp); grp.setExpanded(q and any_grp); any_top |= any_grp
+            top.setHidden(not any_top)
+            if q:
+                top.setExpanded(any_top)
+        if q and first is not None:
+            self.tree.setCurrentItem(first)
+        self.info.setText("" if first or not q else "Нічого не знайдено. Спробуйте коротшу частину слова.")
 
     def _show(self, it, _prev=None):
         tid = it.data(0, Qt.UserRole) if it else None

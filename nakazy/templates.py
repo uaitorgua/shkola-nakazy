@@ -293,3 +293,23 @@ def types_by_kind() -> dict[str, list[str]]:
 for _id in ("o_year_start", "o_attest", "o_attest_list", "o_qualification", "k_load", "o_duty", "o_olympiad",
             "o_dpa", "o_pedrada"):
     TEMPLATE_BY_ID[_id].approve = True
+
+
+def _norm(s: str) -> str:
+    return re.sub(r"[\s'’ʼ*«»\"]+", " ", (s or "").lower().replace("ё", "е")).strip()
+
+
+def search(query: str) -> list[Template]:
+    """Пошук шаблонів: кожне слово запиту – підрядок (харч → харчування; * ігнорується) у назві,
+    типі, виді, підставі, полях, пунктах і назвах додатків."""
+    from .db import KIND_BY_CODE
+    words = _norm(query).split()
+    if not words:
+        return list(TEMPLATES)
+    out = []
+    for t in TEMPLATES:
+        hay = _norm(" ".join([t.title, t.type, KIND_BY_CODE[t.kind].title, t.basis, t.preamble, *t.items,
+                              *t.attachments, *(l for _k, l in t.fields)]))
+        if all(w in hay for w in words):
+            out.append(t)
+    return out
