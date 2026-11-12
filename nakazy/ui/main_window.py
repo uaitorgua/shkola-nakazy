@@ -47,19 +47,25 @@ class MainWindow(QMainWindow):
         self.list.currentItemChanged.connect(lambda *_: self.show_current())
         self.list.itemDoubleClicked.connect(lambda *_: self.edit_current())
         mid = QWidget(); ml = QVBoxLayout(mid); ml.setContentsMargins(6, 6, 6, 6)
-        bar = QHBoxLayout()
-        for text, slot in (("Новий наказ", self.new_order), ("Відкрити", self.edit_current),
-                           ("Зареєструвати", self.register_current), ("Наказ про зміни", self.amend_current),
-                           ("Скасувати", self.cancel_current), ("Зберегти DOCX/PDF…", self.export_current), ("Журнал…", self.export_journal), ("Справи…", self.open_cases), ("Перевірка", self.run_audit), ("Люди…", self.open_people), ("Імпорт наказів…", self.import_orders),
-                           ("Заклад…", self.settings)):
-            b = QPushButton(text); b.clicked.connect(slot); bar.addWidget(b)
-        bar.addStretch()
-        ml.addLayout(bar); ml.addWidget(self.search); ml.addWidget(self.list, 1)
+        # два ряди: дії з наказом і службові вікна (в один ряд кнопки витісняли панель перегляду)
+        rows = []
+        for group in ((("Новий наказ", self.new_order), ("Відкрити", self.edit_current),
+                       ("Зареєструвати", self.register_current), ("Наказ про зміни", self.amend_current),
+                       ("Скасувати", self.cancel_current), ("Зберегти DOCX/PDF…", self.export_current)),
+                      (("Журнал…", self.export_journal), ("Справи…", self.open_cases), ("Перевірка", self.run_audit),
+                       ("Люди…", self.open_people), ("Імпорт наказів…", self.import_orders), ("Заклад…", self.settings))):
+            row = QHBoxLayout()
+            for text, slot in group:
+                b = QPushButton(text); b.clicked.connect(slot); row.addWidget(b)
+            row.addStretch(); rows.append(row)
+        ml.addLayout(rows[0]); ml.addLayout(rows[1]); ml.addWidget(self.search); ml.addWidget(self.list, 1)
 
         self.preview = QTextBrowser()
         split = QSplitter()
         split.addWidget(left); split.addWidget(mid); split.addWidget(self.preview)
-        split.setSizes([230, 650, 400])
+        self.preview.setMinimumWidth(360); left.setMinimumWidth(240); left.setMaximumWidth(340)
+        split.setStretchFactor(0, 0); split.setStretchFactor(1, 3); split.setStretchFactor(2, 2)
+        split.setSizes([280, 640, 440])
         self.setCentralWidget(split)
         self.refresh()
 
@@ -281,6 +287,10 @@ def run():
     from PySide6.QtWidgets import QApplication
     _setup_log()
     app = QApplication(sys.argv)
+    from PySide6.QtCore import QLibraryInfo, QLocale, QTranslator
+    tr = QTranslator(app)  # українські стандартні кнопки Qt («Скасувати» замість «Cancel»)
+    if tr.load(QLocale(QLocale.Language.Ukrainian), "qtbase", "_", QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)):
+        app.installTranslator(tr)
     w = MainWindow(Database())
     w.show()
     return app.exec()

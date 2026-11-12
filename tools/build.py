@@ -63,11 +63,12 @@ if "check" in args:
           (ROOT.parent / "Сканер-ШКОЛА" / "certs" / "UAIT_CodeSigning.pfx").exists() else "немає")
     sys.exit(0)
 
+(ROOT / "build").mkdir(exist_ok=True)
 step(1, "Залежності", [PY, "-m", "pip", "install", "-q", "--disable-pip-version-check", "-r", "requirements.txt"])
 print("[1/7] OCR-моделі", flush=True); ocr_models()
 if "notest" not in args:
     for t in TESTS:
-        step(2, f"Тести: {t}", [PY, f"tests/{t}.py"], ROOT / "build" / f"test_{t}.log")
+        step(2, f"Тести: {t}", [PY, f"tests/{t}.py"], ROOT / "build" / f"{t}.log")
 if EXE.exists():
     try:
         open(EXE, "r+b").close()

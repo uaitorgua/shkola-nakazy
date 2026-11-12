@@ -24,6 +24,7 @@ class _Fetch(QThread):
 class PromoPanel(base.PromoPanel):
     def __init__(self, online: bool = True):
         super().__init__(online=False)       # без власного запиту базового класу
+        self.setFixedHeight(250)              # у вузькій колонці опис переноситься на 3–4 рядки
         self.data = promo.load_offline()      # кеш свіжого або вшите
         self.show_course(0)
         if online:

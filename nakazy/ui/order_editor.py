@@ -1,6 +1,8 @@
 """Редактор наказу: InterText (зі «Сканер ШКОЛА») + панель реквізитів, збереження в базу."""
 from __future__ import annotations
 
+import re
+
 from PySide6.QtCore import QDate, Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDateEdit, QDialog, QDialogButtonBox, QDockWidget, QFileDialog, QFormLayout,
@@ -36,7 +38,9 @@ class TemplatePicker(QDialog):
                 g = groups.get(t.type)
                 if g is None:
                     g = groups[t.type] = QTreeWidgetItem([t.type]); top.addChild(g)
-                it = QTreeWidgetItem([t.title.replace("{", "‹").replace("}", "›")])
+                labels = {k: l.split(" (")[0].lower() for k, l in t.fields}
+                shown = re.sub(r"\{(\w+)(?:\.\w+)?\}", lambda m: f"‹{labels.get(m.group(1), m.group(1))}›", t.title)
+                it = QTreeWidgetItem([shown])
                 it.setData(0, Qt.UserRole, t.id); g.addChild(it)
             top.setExpanded(kind in (None, k.code))
         empty = QTreeWidgetItem(["Порожній наказ (без шаблону)"]); empty.setData(0, Qt.UserRole, "")
@@ -65,8 +69,8 @@ class TemplatePicker(QDialog):
             for key, label in t.fields:
                 e = QLineEdit(); self.edits[key] = e
                 if key in self.PERSON_KEYS and self.db is not None:
-                    row = QHBoxLayout(); row.addWidget(e, 1)
-                    cb = QComboBox(); cb.setEditable(True); cb.setMinimumWidth(220)
+                    row = QVBoxLayout(); row.setSpacing(4)
+                    cb = QComboBox(); cb.setEditable(True)
                     cb.lineEdit().setPlaceholderText("вибрати з довідника…")
                     from ..people import People
                     cb.addItem("", None)
@@ -76,7 +80,8 @@ class TemplatePicker(QDialog):
                     cb.setInsertPolicy(QComboBox.NoInsert)
                     cb.completer().setFilterMode(Qt.MatchContains)
                     cb.activated.connect(lambda i, k=key, c=cb: self._pick_person(k, c.itemData(i)))
-                    row.addWidget(cb); f.addRow(label, row)
+                    row.addWidget(cb); row.addWidget(e); e.setPlaceholderText("або введіть вручну")
+                    f.addRow(label, row)
                 else:
                     f.addRow(label, e)
         else:
