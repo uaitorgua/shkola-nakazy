@@ -26,6 +26,8 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Накази ШКОЛА")
         self.resize(1280, 800)
         self.setStyleSheet(STYLE)
+        from shkola.ui.logo import app_icon
+        self.setWindowIcon(app_icon())
 
         self.year = QComboBox()
         self.year.currentIndexChanged.connect(self.refresh)
@@ -296,6 +298,8 @@ def run():
     tr = QTranslator(app)  # українські стандартні кнопки Qt («Скасувати» замість «Cancel»)
     if tr.load(QLocale(QLocale.Language.Ukrainian), "qtbase", "_", QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)):
         app.installTranslator(tr)
+    from shkola.ui.logo import app_icon
+    app.setWindowIcon(app_icon())  # іконка «Накази ШКОЛА» в заголовку всіх вікон і на панелі задач
     w = MainWindow(Database())
     w.show()
     return app.exec()
