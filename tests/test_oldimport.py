@@ -155,5 +155,7 @@ class Gui(unittest.TestCase):
         self.assertIn("Виправлений текст", db.get(oid)["body_html"])
 
 
+from qt_cleanup import tearDownModule  # noqa: E402,F401
+
 if __name__ == "__main__":
     unittest.main()

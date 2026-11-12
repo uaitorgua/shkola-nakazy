@@ -55,5 +55,7 @@ class Promo(unittest.TestCase):
         self.assertEqual(p.courses()[0]["name"], "Новий курс")
 
 
+from qt_cleanup import tearDownModule  # noqa: E402,F401
+
 if __name__ == "__main__":
     unittest.main()

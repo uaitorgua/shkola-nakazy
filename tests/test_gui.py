@@ -81,5 +81,7 @@ class Secretary(unittest.TestCase):
         self.assertEqual([x for x in audit(self.db) if x[0] == "помилка"], [])
 
 
+from qt_cleanup import tearDownModule  # noqa: E402,F401
+
 if __name__ == "__main__":
     unittest.main()

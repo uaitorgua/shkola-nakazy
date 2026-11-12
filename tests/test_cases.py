@@ -68,5 +68,7 @@ class CasesTest(unittest.TestCase):
         self.assertEqual(self.c.get(2026, kind, part)["article"], "ст. 16 а")
 
 
+from qt_cleanup import tearDownModule  # noqa: E402,F401
+
 if __name__ == "__main__":
     unittest.main()

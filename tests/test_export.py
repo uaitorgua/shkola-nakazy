@@ -150,5 +150,7 @@ class ExportTest(unittest.TestCase):
         b = io.BytesIO(); Image.new("RGB", (300, 400), "white").save(b, "PDF"); return b.getvalue()
 
 
+from qt_cleanup import tearDownModule  # noqa: E402,F401
+
 if __name__ == "__main__":
     unittest.main()

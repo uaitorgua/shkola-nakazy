@@ -168,5 +168,7 @@ class Gui(unittest.TestCase):
         self.assertNotIn("pupil.acc", tp.values())
 
 
+from qt_cleanup import tearDownModule  # noqa: E402,F401
+
 if __name__ == "__main__":
     unittest.main()
