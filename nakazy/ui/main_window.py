@@ -37,6 +37,11 @@ class MainWindow(QMainWindow):
         from .promo_panel import PromoPanel
         self.promo = PromoPanel(online=not os.environ.get("NAKAZY_OFFLINE"))  # курси УАІТ: сайт → кеш → вшите
         ll.addWidget(self.promo)
+        if not os.environ.get("NAKAZY_OFFLINE"):                 # тести вимикають мережу
+            from PySide6.QtCore import QTimer
+            from .update_check import UpdateChecker
+            self.updates = UpdateChecker(self)
+            QTimer.singleShot(1500, self.updates.start)          # обов'язкова перевірка оновлень
 
         self.search = QLineEdit(); self.search.setPlaceholderText("Пошук у наказах…")
         self.search.textChanged.connect(self.reload_list)

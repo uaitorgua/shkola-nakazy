@@ -47,3 +47,5 @@ akazy-shkola\promo_cache.json` (якщо не старший за вшитий) 
 
 ## Репозиторій
 - Публічний: https://github.com/uaitorgua/shkola-nakazy (створено 08.11.2026, гілка main).
+
+- 12.11.2026 **Обов'язкове оновлення, версія 0.1.1**: `nakazy/updater.py` + `nakazy/ui/update_check.py` (як у «Сканері»): через 1,5 с після запуску https://uait.org.ua/nakazy/version.json; якщо новіша – вікно «Потрібне оновлення» (Оновити зараз / Вийти), інсталятор завантажується з перевіркою md5 і запускається; встановлення зі Store не перевіряється. Змінна NAKAZY_UPDATE_BASE для тестів, NAKAZY_OFFLINE вимикає. Тест test_update OK. На сайті тека ~/public_html/nakazy/ (Setup-0.1.1 і version.json; заливати спершу інсталятор, останнім version.json). MSIX 0.1.1.0 зібрано, у Store не подано. Також: WIA читає сторінку з пам'яті (WinError 32).

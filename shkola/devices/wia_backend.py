@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import logging
 import os
 import tempfile
@@ -222,6 +223,14 @@ class WiaBackend(ScannerBackend):
 
     @staticmethod
     def _to_image(img_file) -> Image.Image:
+        # Спершу з пам'яті: у режимі «відтінки сірого» WIA довго тримає тимчасовий файл (WinError 32)
+        try:
+            data = bytes(img_file.FileData.BinaryData)
+            with Image.open(io.BytesIO(data)) as im:
+                im.load()
+                return im.copy()
+        except Exception:
+            log.debug("WIA: BinaryData недоступні, через файл", exc_info=True)
         fd, path = tempfile.mkstemp(suffix=".png")
         os.close(fd)
         os.remove(path)          # WIA не перезаписує наявний файл
@@ -231,5 +240,11 @@ class WiaBackend(ScannerBackend):
                 im.load()
                 return im.copy()
         finally:
-            if os.path.exists(path):
-                os.remove(path)
+            del img_file                 # WIA ImageFile тримає файл відкритим
+            for _ in range(10):          # видаляємо, але не ламаємо сканування
+                try:
+                    if os.path.exists(path):
+                        os.remove(path)
+                    break
+                except PermissionError:
+                    time.sleep(0.3)

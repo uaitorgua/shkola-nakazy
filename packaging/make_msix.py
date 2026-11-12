@@ -45,7 +45,7 @@ def main() -> None:
     for f in assets.glob("*.png"):
         shutil.copy2(f, STAGE / "Assets" / f.name)
     manifest = (PKG / "AppxManifest.template.xml").read_text(encoding="utf-8")
-    for k, v in ident.items():
+    for k, v in ((k, v) for k, v in ident.items() if k != "StoreId"):
         manifest = manifest.replace("{" + k + "}", v)
     (STAGE / "AppxManifest.xml").write_text(manifest, encoding="utf-8")
 
