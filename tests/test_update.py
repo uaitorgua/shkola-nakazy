@@ -1,38 +1,30 @@
-"""Локальний тест перевірки оновлень: http-сервер на 127.0.0.1 віддає version.json і «інсталятор»."""
-import hashlib, http.server, json, os, sys, tempfile, threading
-from functools import partial
+"""Локальний тест: http-сервер віддає відповідь «каталогу Microsoft» з різними версіями."""
+import http.server, json, os, sys, threading
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-d = Path(tempfile.mkdtemp())
-setup = "NakazyShkola-Setup-9.9.9.exe"
-(d / setup).write_bytes(b"MZ" + os.urandom(3_000_000))
-md5 = hashlib.md5((d / setup).read_bytes()).hexdigest()
-(d / "version.json").write_text(json.dumps({"version": "9.9.9", "setup": setup, "md5": {setup: md5}}), encoding="utf-8")
-srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), partial(http.server.SimpleHTTPRequestHandler, directory=str(d)))
+state = {"body": b"{}"}
+class H(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(state.get("code", 200)); self.end_headers(); self.wfile.write(state["body"])
+    def log_message(self, *a): pass
+srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
 threading.Thread(target=srv.serve_forever, daemon=True).start()
-os.environ["NAKAZY_UPDATE_BASE"] = f"http://127.0.0.1:{srv.server_port}/"
+os.environ["NAKAZY_CATALOG_URL"] = f"http://127.0.0.1:{srv.server_port}/"
 sys.path.insert(0, str(ROOT))
 from nakazy import updater, __version__  # noqa: E402
 
-assert updater.is_newer("1.1.10", "1.1.9") and not updater.is_newer(__version__)
-info = updater.check(); assert info and info["version"] == "9.9.9", info
-seen = []
-p = updater.download(info, lambda a, b: seen.append(a)); assert Path(p).read_bytes() == (d / setup).read_bytes() and seen
-os.remove(p)
-# підмінений файл — відмова
-info["md5"][setup] = "0" * 32
-try:
-    updater.download(info); raise SystemExit("md5 не перевірено")
-except IOError:
-    pass
-# та сама версія — оновлення немає
-(d / "version.json").write_text(json.dumps({"version": __version__, "setup": f"NakazyShkola-Setup-{__version__}.exe"}), encoding="utf-8")
-assert updater.check() is None
-# шкідливе ім'я файлу — ігнор
-(d / "version.json").write_text(json.dumps({"version": "9.9.9", "setup": "..\\evil.exe"}), encoding="utf-8")
-assert updater.check() is None
-# сайт недоступний — без помилки
-os.environ["NAKAZY_UPDATE_BASE"] = "http://127.0.0.1:1/"
-import importlib; importlib.reload(updater); assert updater.check(timeout=2) is None
+def cat(*vers, name=updater.PACKAGE_NAME):
+    pk = [{"PackageFullName": f"{name}_{v}_x64__abc"} for v in vers]
+    state["body"] = json.dumps({"Product": {"DisplaySkuAvailabilities": [{"Sku": {"Properties": {"Packages": pk}}}]}}).encode()
+
+assert updater.is_newer("1.1.10.0", "1.1.9") and not updater.is_newer(__version__ + ".0")
+cat("1.0.0.0", "9.9.9.0"); assert updater.check() == {"version": "9.9.9.0"}, updater.check()
+cat(__version__ + ".0"); assert updater.check() is None, "та сама версія"
+cat("9.9.9.0", name="Other.App"); assert updater.check() is None, "чужий пакет"
+state["body"] = b"{}"; assert updater.check() is None, "програми немає в Store"
+state["code"] = 404; assert updater.check() is None, "404 від каталогу"; state["code"] = 200
+state["body"] = b"not json"; assert updater.check() is None, "зіпсована відповідь"
+os.environ["NAKAZY_CATALOG_URL"] = "http://127.0.0.1:1/"
+import importlib; importlib.reload(updater); assert updater.check(timeout=2) is None, "без мережі"
 print("update OK")

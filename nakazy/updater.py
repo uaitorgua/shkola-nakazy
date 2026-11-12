@@ -1,29 +1,33 @@
-"""Перевірка оновлень: https://uait.org.ua/nakazy/version.json.
+"""Перевірка оновлень лише через Microsoft Store.
 
-Якщо на сайті версія новіша — програма вимагає оновитись (ui/update_check.py).
-Встановлення з Microsoft Store (MSIX у WindowsApps) оновлюється через Store, інше — інсталятором з сайту.
+Остання опублікована версія береться з каталогу Microsoft (displaycatalog.mp.microsoft.com).
+Якщо вона новіша — програма вимагає оновитись і відкриває свою сторінку в Microsoft Store
+(і для Store-копії, і для встановленої іншим способом). Наш сервер не використовується.
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import os
 import re
 import sys
-import tempfile
 import urllib.request
 
 from . import __version__
 
 log = logging.getLogger(__name__)
-BASE = os.environ.get("NAKAZY_UPDATE_BASE", "https://uait.org.ua/nakazy/")   # змінна — лише для локальних тестів
-VERSION_URL = BASE + "version.json"
-STORE_URL = "ms-windows-store://pdp/?productid=9PJNZB9R4HGK"
+PRODUCT_ID = "9PJNZB9R4HGK"
+CATALOG_URL = os.environ.get(
+    "NAKAZY_CATALOG_URL",          # лише для локальних тестів
+    f"https://displaycatalog.mp.microsoft.com/v7.0/products/{PRODUCT_ID}?market=UA&languages=uk-ua,neutral")
+STORE_URL = f"ms-windows-store://pdp/?productid={PRODUCT_ID}"
+WEB_URL = f"https://apps.microsoft.com/detail/{PRODUCT_ID}"
+PACKAGE_NAME = "UAIT.118389E8B5916"            # Package/Identity/Name у MSIX
 
 
 def parse(v: str) -> tuple[int, ...]:
-    return tuple(int(x) for x in re.findall(r"\d+", str(v))[:4]) or (0,)
+    t = tuple(int(x) for x in re.findall(r"\d+", str(v))[:4]) or (0,)
+    return t + (0,) * (4 - len(t))
 
 
 def is_newer(remote: str, local: str = __version__) -> bool:
@@ -31,47 +35,25 @@ def is_newer(remote: str, local: str = __version__) -> bool:
 
 
 def is_store_install() -> bool:
-    return "\\windowsapps\\" in sys.executable.lower()
+    return r"\windowsapps" + "\\" in sys.executable.lower()
 
 
-def _get(url: str, timeout: float, limit: int) -> bytes:
-    req = urllib.request.Request(url, headers={"User-Agent": "NakazyShkola/" + __version__})
-    with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310 – лише https uait.org.ua
-        return r.read(limit)
+def latest_version(timeout: float = 8) -> str | None:
+    """Найвища версія пакета цієї програми, опублікована в Microsoft Store."""
+    req = urllib.request.Request(CATALOG_URL, headers={"User-Agent": "NakazyShkola/" + __version__})
+    with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310 – лише каталог Microsoft
+        data = json.loads(r.read(5_000_000).decode("utf-8"))
+    names = re.findall(r'"PackageFullName"\s*:\s*"([^"]+)"', json.dumps(data))
+    vers = [m.group(1) for n in names if n.startswith(PACKAGE_NAME + "_")
+            for m in [re.match(re.escape(PACKAGE_NAME) + r"_(\d+\.\d+\.\d+\.\d+)_", n)] if m]
+    return max(vers, key=parse) if vers else None
 
 
-def check(timeout: float = 6) -> dict | None:
-    """Повертає version.json, якщо є новіша версія; інакше (або без мережі) None."""
-    if is_store_install():          # Microsoft Store оновлює сам; сайт може випереджати сертифікацію
-        return None
+def check(timeout: float = 8) -> dict | None:
+    """{"version": …}, якщо в Microsoft Store є новіша версія; інакше (або без мережі) None."""
     try:
-        d = json.loads(_get(VERSION_URL, timeout, 100_000).decode("utf-8"))
-        setup = str(d.get("setup", ""))
-        if not re.fullmatch(r"NakazyShkola-Setup-[\d.]+\.exe", setup):
-            return None
-        return d if is_newer(d.get("version", "0")) else None
+        v = latest_version(timeout)
+        return {"version": v} if v and is_newer(v) else None
     except Exception as e:  # noqa: BLE001
-        log.info("Оновлення: сайт недоступний (%s)", e)
+        log.info("Оновлення: каталог Microsoft Store недоступний (%s)", e)
         return None
-
-
-def download(info: dict, progress=None) -> str:
-    """Завантажує інсталятор у %TEMP% і звіряє md5. Повертає шлях."""
-    name = info["setup"]
-    path = os.path.join(tempfile.gettempdir(), name)
-    req = urllib.request.Request(BASE + name, headers={"User-Agent": "NakazyShkola/" + __version__})
-    md5 = hashlib.md5()
-    with urllib.request.urlopen(req, timeout=60) as r, open(path, "wb") as fh:  # noqa: S310
-        total = int(r.headers.get("Content-Length") or 0)
-        done = 0
-        while chunk := r.read(1 << 20):
-            fh.write(chunk)
-            md5.update(chunk)
-            done += len(chunk)
-            if progress:
-                progress(done, total)
-    want = (info.get("md5") or {}).get(name)
-    if want and md5.hexdigest() != want:
-        os.remove(path)
-        raise IOError("Завантажений інсталятор пошкоджено (md5 не збігається)")
-    return path
