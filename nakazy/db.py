@@ -5,13 +5,14 @@
 from __future__ import annotations
 
 import datetime as dt
+import html
 import os
 import re
 import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 
 @dataclass(frozen=True)
@@ -97,6 +98,11 @@ CREATE TABLE IF NOT EXISTS attachments (
     n INTEGER NOT NULL, title TEXT NOT NULL DEFAULT '', mode TEXT NOT NULL,  -- 'text' | 'file'
     body_html TEXT NOT NULL DEFAULT '', filename TEXT, data BLOB, approved INTEGER NOT NULL DEFAULT 0,
     UNIQUE (order_id, n));
+CREATE TABLE IF NOT EXISTS order_links (
+    order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    field TEXT NOT NULL,                     -- поле шаблону (leave_order, order…)
+    ref_id INTEGER NOT NULL REFERENCES orders(id),
+    PRIMARY KEY (order_id, field));
 CREATE TABLE IF NOT EXISTS blanks (
     id INTEGER PRIMARY KEY, name TEXT NOT NULL, mode TEXT NOT NULL,  -- 'text' | 'image' | 'docx'
     data BLOB, fields_json TEXT NOT NULL DEFAULT '{}', is_default INTEGER NOT NULL DEFAULT 0);
@@ -336,6 +342,7 @@ class Database:
             self._unindex(order_id)
             self.con.execute("DELETE FROM attachments WHERE order_id = ?", (order_id,))
             self.con.execute("DELETE FROM order_persons WHERE order_id = ?", (order_id,))
+            self.con.execute("DELETE FROM order_links WHERE order_id = ?", (order_id,))
             self.con.execute("DELETE FROM order_versions WHERE order_id = ?", (order_id,))
             self.con.execute("DELETE FROM orders WHERE id = ?", (order_id,))
 
@@ -434,6 +441,50 @@ class Database:
             self.con.execute("UPDATE orders SET status = 'cancelled', notes = ?, updated_at = ? WHERE id = ?",
                              (note, _now(), order_id))
             self._audit(order_id, "cancel", reason)
+
+    # зв'язок наказів (v5): новий наказ посилається на попередній (поновлення → звільнення тощо)
+    def link_order(self, order_id: int, field: str, ref_id: int):
+        if self._require(ref_id)["status"] == "draft":
+            raise RegistrationError("Посилатися можна лише на зареєстрований наказ.")
+        with self.tx():
+            self.con.execute("INSERT OR REPLACE INTO order_links VALUES (?, ?, ?)", (order_id, field, ref_id))
+            self._audit(order_id, "link", f"{field} -> {ref_id}")
+
+    def links_from(self, order_id: int) -> list[sqlite3.Row]:
+        """На які накази посилається цей наказ."""
+        return self.con.execute("SELECT o.*, l.field FROM order_links l JOIN orders o ON o.id = l.ref_id "
+                                "WHERE l.order_id = ? ORDER BY o.date, o.id", (order_id,)).fetchall()
+
+    def links_to(self, order_id: int) -> list[sqlite3.Row]:
+        """Які накази посилаються на цей наказ."""
+        return self.con.execute("SELECT o.*, l.field FROM order_links l JOIN orders o ON o.id = l.order_id "
+                                "WHERE l.ref_id = ? ORDER BY o.date IS NULL, o.date, o.id", (order_id,)).fetchall()
+
+    def links_html(self, order_id: int) -> str:
+        """Пов'язані накази для перегляду: на що посилається і хто посилається на цей наказ."""
+        def one(r):
+            ref = f"від {format_date(r['date']) or '__.__.____'} № {r['reg_index'] or 'чернетка'}"
+            gone = " (скасовано)" if r["status"] == "cancelled" else ""
+            return f"{ref} «{html.escape(r['title'])}»{gone}"
+        out = [f"<li>Підстава: наказ {one(r)}</li>" for r in self.links_from(order_id)]
+        out += [f"<li>Пов'язаний наказ: {one(r)}</li>" for r in self.links_to(order_id)]
+        return f"<ul>{''.join(out)}</ul>" if out else ""
+
+    def ref_candidates(self, template_ids, person_id: int | None = None) -> list[sqlite3.Row]:
+        """Зареєстровані накази, на які можна послатися: спершу за потрібним шаблоном і цією людиною,
+        далі інші накази того самого виду (зокрема імпортовані архівні – вони без шаблону)."""
+        from .templates import TEMPLATE_BY_ID
+        tids = [t for t in template_ids if t in TEMPLATE_BY_ID]
+        kinds = sorted({TEMPLATE_BY_ID[t].kind for t in tids})
+        if not kinds:
+            return []
+        q = ",".join("?" * len(tids))
+        return self.con.execute(
+            f"SELECT o.*, (o.template_id IN ({q})) AS by_tpl, "
+            "EXISTS (SELECT 1 FROM order_persons op WHERE op.order_id = o.id AND op.person_id = ?) AS by_person "
+            f"FROM orders o WHERE o.status = 'registered' AND o.kind IN ({','.join('?' * len(kinds))}) "
+            "ORDER BY by_person DESC, by_tpl DESC, o.date DESC, o.id DESC",
+            [*tids, person_id or -1, *kinds]).fetchall()
 
     def create_amendment(self, order_id: int) -> int:
         """Чернетка наказу «Про внесення змін…» до зареєстрованого наказу (р. III п. 1)."""

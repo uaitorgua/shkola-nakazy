@@ -157,6 +157,7 @@ class MainWindow(QMainWindow):
             f"{warn}<p align=center><b>{head}</b></p><p align=center><b>НАКАЗ</b></p>"
             f"<p>{meta}</p><p><b>{html.escape(r['title'])}</b></p>{r['body_html']}"
             f"<p>{sig}</p>{'<ul>' + atts + '</ul>' if atts else ''}"
+            f"{self.db.links_html(r['id'])}"
             f"<p style='color:gray'>Статус: {STATUS_TITLES[r['status']]}. {html.escape(r['notes'])}</p>")
 
     # дії
@@ -173,7 +174,8 @@ class MainWindow(QMainWindow):
         dlg = TemplatePicker(self, kind, self.db)
         if dlg.exec():
             vals = dlg.values()
-            oid = self._try(lambda: create_from_template(self.db, dlg.template_id, vals, kind or "osn", dlg.persons))
+            oid = self._try(lambda: create_from_template(self.db, dlg.template_id, vals, kind or "osn", dlg.persons,
+                                                         getattr(dlg, "refs", {})))
             self.refresh()
             if oid:
                 self.open_editor(oid)

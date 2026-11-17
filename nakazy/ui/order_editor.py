@@ -12,8 +12,8 @@ from PySide6.QtWidgets import (
 
 from shkola.ui.editor_window import EditorWindow
 
-from ..db import KINDS, KIND_BY_CODE, Database, OrderLocked, check_structure
-from ..templates import TEMPLATE_BY_ID, TEMPLATES, render
+from ..db import KINDS, KIND_BY_CODE, Database, OrderLocked, check_structure, format_date
+from ..templates import REFS, TEMPLATE_BY_ID, TEMPLATES, ref_values, render
 
 
 class TemplatePicker(QDialog):
@@ -26,6 +26,8 @@ class TemplatePicker(QDialog):
         self.db = db
         self.person_vals: dict[str, dict] = {}
         self.persons: dict[str, int] = {}
+        self.refs: dict[str, int] = {}          # поле → id наказу-підстави
+        self.ref_boxes: dict[str, QComboBox] = {}
         self.setWindowTitle("Новий наказ за шаблоном")
         self.resize(900, 600)
         self.tree = QTreeWidget(); self.tree.setHeaderHidden(True)
@@ -91,12 +93,23 @@ class TemplatePicker(QDialog):
     def _show(self, it, _prev=None):
         tid = it.data(0, Qt.UserRole) if it else None
         w = QWidget(); f = QFormLayout(w); self.edits = {}
+        self.template_id = tid
         if tid:
             t = TEMPLATE_BY_ID[tid]
             self.info.setText(f"<b>{KIND_BY_CODE[t.kind].title}</b> · {t.type}<br>"
                               f"Нормативна підстава (орієнтир): {t.basis or '–'}"
                               + (f"<br>Додатки: {', '.join(t.attachments)}" if t.attachments else ""))
-            self.person_vals, self.persons = {}, {}
+            self.person_vals, self.persons, self.refs, self.ref_boxes = {}, {}, {}, {}
+            refs = REFS.get(tid, {}) if self.db is not None else {}
+            for rkey, sources in refs.items():  # наказ-підстава з реєстру (зв'язок наказів)
+                cb = QComboBox(); cb.setEditable(True); cb.setInsertPolicy(QComboBox.NoInsert)
+                cb.lineEdit().setPlaceholderText("вибрати з реєстру…")
+                cb.completer().setFilterMode(Qt.MatchContains)
+                cb.activated.connect(lambda i, k=rkey, c=cb: self._pick_ref(k, c.itemData(i)))
+                self.ref_boxes[rkey] = cb
+                names = ", ".join(TEMPLATE_BY_ID[s].type.lower() for s in sources)
+                f.addRow(f"Наказ-підстава ({names})", cb)
+            self._fill_refs()
             for key, label in t.fields:
                 e = QLineEdit(); self.edits[key] = e
                 if key in self.PERSON_KEYS and self.db is not None:
@@ -125,6 +138,23 @@ class TemplatePicker(QDialog):
             return
         self.accept()
 
+    def _fill_refs(self):
+        """Список наказів для посилання: спершу за шаблоном і вибраною людиною."""
+        refs = REFS.get(self.template_id or "", {})
+        for rkey, cb in self.ref_boxes.items():
+            cb.blockSignals(True); cb.clear(); cb.addItem("", None)
+            for r in self.db.ref_candidates(refs.get(rkey, ()), self.persons.get("employee")):
+                cb.addItem(f"{format_date(r['date'])} № {r['reg_index']} {r['title']}", r["id"])
+            cb.blockSignals(False)
+
+    def _pick_ref(self, key: str, oid):
+        if oid is None:
+            self.refs.pop(key, None); return
+        self.refs[key] = oid
+        for k, v in ref_values(key, self.db.get(oid)).items():
+            if k in self.edits:
+                self.edits[k].setText(v)
+
     def _pick_person(self, key: str, pid):
         if pid is None:
             return
@@ -136,6 +166,8 @@ class TemplatePicker(QDialog):
         for k, v in vals.items():  # клас, дата народження, посада
             if "." not in k and k != key and k in self.edits and not self.edits[k].text().strip():
                 self.edits[k].setText(v)
+        if key == "employee" and self.ref_boxes:
+            self._fill_refs()
 
     def values(self) -> dict[str, str]:
         out = {k: e.text().strip() for k, e in self.edits.items()}
@@ -144,6 +176,9 @@ class TemplatePicker(QDialog):
                 out.update({k: v for k, v in vals.items() if "." in k})
             else:
                 self.persons.pop(key, None)
+        for key, oid in list(self.refs.items()):  # посилання лишається, лише якщо поле не змінено вручну
+            if any(out.get(k) != v for k, v in ref_values(key, self.db.get(oid)).items()):
+                self.refs.pop(key)
         return out
 
 
@@ -191,6 +226,9 @@ class OrderEditor(EditorWindow):
         for text, slot in (("+ текст", self._add_text_att), ("+ файл", self._add_file_att), ("Прибрати", self._del_att)):
             b = QPushButton(text); b.clicked.connect(slot); b.setEnabled(not self.readonly); ab.addWidget(b)
         f.addRow(ab)
+        links = self.db.links_html(row["id"])
+        if links:
+            lk = QLabel("<b>Зв'язок наказів</b>" + links); lk.setWordWrap(True); f.addRow(lk)
         self.warn = QLabel(); self.warn.setWordWrap(True); f.addRow(self.warn)
         save = QPushButton("Зберегти в базу (Ctrl+S)"); save.clicked.connect(self.save_order)
         save.setEnabled(not self.readonly); f.addRow(save)
@@ -313,7 +351,7 @@ class OrderEditor(EditorWindow):
 
 
 def create_from_template(db: Database, template_id: str, values: dict[str, str], kind: str = "osn",
-                         persons: dict[str, int] | None = None) -> int:
+                         persons: dict[str, int] | None = None, refs: dict[str, int] | None = None) -> int:
     if not template_id:
         return db.create_draft(kind, title="Про ", body_html="<p>…</p><p>НАКАЗУЮ:</p><p>1. …</p>",
                                signer=db.get_setting("head"))
@@ -325,6 +363,8 @@ def create_from_template(db: Database, template_id: str, values: dict[str, str],
     ppl = People(db)
     for key, pid in (persons or {}).items():
         ppl.link(oid, pid, key)
+    for key, ref_id in (refs or {}).items():
+        db.link_order(oid, key, ref_id)
     for a in t.attachments:
         body = ""
         if a.startswith("Список учнів") and values.get("cls") and ppl.find("pupil", cls=values["cls"]):

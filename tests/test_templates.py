@@ -74,6 +74,7 @@ class TemplatesTest(unittest.TestCase):
         con.commit(); con.close()
         db = Database(path)
         self.assertEqual(db.get(1)["type_name"], "")
+        self.assertEqual(db.links_from(1), [])  # v5: таблиця зв'язку наказів створюється
         backups = os.listdir(os.path.join(d, "backups"))
         self.assertTrue(any("before-migration-v1" in f for f in backups))
         db.close()

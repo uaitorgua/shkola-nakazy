@@ -168,6 +168,55 @@ class Gui(unittest.TestCase):
         self.assertNotIn("pupil.acc", tp.values())
 
 
+    def test_order_links(self):
+        """Зв'язок наказів: перенесення відпустки посилається на наказ про відпустку цієї людини."""
+        from PySide6.QtWidgets import QApplication
+        QApplication.instance() or QApplication([])
+        from nakazy.db import RegistrationError
+        from nakazy.ui.order_editor import TemplatePicker, create_from_template
+        d = tempfile.mkdtemp(); db = Database(os.path.join(d, "l.db")); ppl = People(db)
+        db.set_setting("head", "Олена ПЕТРЕНКО")
+        a = ppl.add(kind="staff", last="Коваль", first="Марія", middle="Іванівна", position="вчитель")
+        b = ppl.add(kind="staff", last="Білий", first="Микола", middle="Іванович", position="вчитель")
+        leave_a = create_from_template(db, "v_annual", {"employee": "Коваль М. І."}, persons={"employee": a})
+        db.register(leave_a, "2026-07-01")
+        leave_b = create_from_template(db, "v_annual", {"employee": "Білий М. І."}, persons={"employee": b})
+        db.register(leave_b, "2026-07-02")
+        draft = create_from_template(db, "v_annual", {})
+        tp = TemplatePicker(None, "v", db)
+        tops = [tp.tree.topLevelItem(k) for k in range(tp.tree.topLevelItemCount())]
+        items = [t.child(i).child(j) for t in tops for i in range(t.childCount())
+                 for j in range(t.child(i).childCount())]
+        tp.tree.setCurrentItem(next(it for it in items if it.data(0, 256) == "v_transfer"))
+        cb = tp.ref_boxes["leave_order"]
+        ids = [cb.itemData(i) for i in range(cb.count())]
+        self.assertEqual(ids[0], None); self.assertNotIn(draft, ids)  # чернетка не підстава
+        tp._pick_person("employee", a)
+        self.assertEqual(tp.ref_boxes["leave_order"].itemData(1), leave_a)  # спершу накази цієї людини
+        tp._pick_ref("leave_order", leave_a)
+        self.assertEqual(tp.edits["leave_order"].text(), f"01.07.2026 № {db.get(leave_a)['reg_index']}")
+        vals = tp.values()
+        self.assertEqual(tp.refs, {"leave_order": leave_a})
+        oid = create_from_template(db, "v_transfer", vals, persons=tp.persons, refs=tp.refs)
+        self.assertIn("наказом від 01.07.2026", db.get(oid)["body_html"])
+        self.assertEqual([r["id"] for r in db.links_from(oid)], [leave_a])
+        self.assertEqual([r["id"] for r in db.links_to(leave_a)], [oid])
+        self.assertIn("Пов'язаний наказ", db.links_html(leave_a))
+        self.assertIn("Підстава: наказ від 01.07.2026", db.links_html(oid))
+        # поле змінено вручну – посилання не зберігається
+        tp.edits["leave_order"].setText("15.06.2026 № 9-в"); tp.values()
+        self.assertEqual(tp.refs, {})
+        # пара {order_date} {order_no} для наказу про зміни до відрядження
+        trip = create_from_template(db, "v_trip", {}); db.register(trip, "2026-09-01")
+        from nakazy.templates import ref_values
+        self.assertEqual(ref_values("order", db.get(trip)),
+                         {"order_date": "01.09.2026", "order_no": db.get(trip)["reg_index"]})
+        with self.assertRaises(RegistrationError):
+            db.link_order(oid, "x", draft)
+        db.delete_draft(oid)
+        self.assertEqual(db.links_to(leave_a), [])
+        db.close()
+
 from qt_cleanup import tearDownModule  # noqa: E402,F401
 
 if __name__ == "__main__":

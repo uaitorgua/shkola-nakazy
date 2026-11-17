@@ -142,10 +142,12 @@ TEMPLATES: list[Template] = [
     # «не підтверджено» – акт не вдалося відкрити, заклад звіряє сам.
     Template("k_duties_stop", "k", "Покладання обов'язків", "Про припинення виконання обов'язків {duty} {employee.gen}",
              "У зв'язку з {reason}",
-             ["Припинити виконання {employee.gen}, {position}, обов'язків {duty} з {from_date}.",
+             ["Припинити виконання {employee.gen}, {position}, обов'язків {duty}, покладених наказом від {duty_order}, "
+              "з {from_date}.",
               "Бухгалтерії припинити доплату за виконання обов'язків тимчасово відсутнього працівника з {from_date}."],
              [F_EMP, F_POS, ("duty", "Обов'язки (напр. директора)"),
-              ("reason", "Причина (напр. виходом на роботу …)"), F_DATE], "КЗпП України, ст. 105"),
+              ("reason", "Причина (напр. виходом на роботу …)"), F_DATE,
+              ("duty_order", "Наказ про покладання обов'язків (дата, номер)")], "КЗпП України, ст. 105"),
     Template("k_reinstate", "k", "Поновлення", "Про поновлення на роботі {employee.gen}",
              "На виконання {decision}",
              ["Скасувати наказ від {dismiss_order} про звільнення {employee.gen}.",
@@ -246,10 +248,12 @@ TEMPLATES: list[Template] = [
              "Про допуск до роботи {employee.gen} після звільнення з військової служби",
              "Відповідно до статті 119 Кодексу законів про працю України, у зв'язку зі звільненням з військової "
              "служби ({doc}), на підставі {application}",
-             ["Допустити {employee.acc} до роботи на посаді {position} з {from_date}.",
+             ["Допустити {employee.acc} до роботи на посаді {position} з {from_date} (увільнення від роботи – наказ "
+              "від {military_order}).",
               "Бухгалтерії нараховувати заробітну плату з {from_date}.",
               "Відповідальній за кадрову роботу внести відомості до особової справи та військового обліку."],
-             [F_EMP, F_POS, F_DATE, ("doc", "Документ про звільнення зі служби (дата, номер)"), F_APPL],
+             [F_EMP, F_POS, F_DATE, ("doc", "Документ про звільнення зі служби (дата, номер)"),
+              ("military_order", "Наказ про увільнення у зв'язку з призовом (дата, номер)"), F_APPL],
              "КЗпП України, ст. 119"),
     Template("k_rename", "k", "Облікові дані", "Про зміну облікових даних {employee.gen}",
              "У зв'язку зі зміною {what}, на підставі {doc} та {application}",
@@ -282,9 +286,10 @@ TEMPLATES: list[Template] = [
               ("doc", "Підтвердний документ"), F_APPL], "Закон України «Про відпустки»"),
     Template("v_recall", "v", "Інші відпустки", "Про відкликання з відпустки {employee.gen}",
              "У зв'язку з {reason}, за згодою працівника",
-             ["Відкликати {employee.acc}, {position}, із щорічної відпустки з {from_date}.",
+             ["Відкликати {employee.acc}, {position}, із щорічної відпустки, наданої наказом від {leave_order}, з {from_date}.",
               "Невикористану частину відпустки тривалістю {days} календарних днів надати {when}."],
-             [F_EMP, F_POS, ("reason", "Причина"), F_DATE, ("days", "Невикористані дні"),
+             [F_EMP, F_POS, ("reason", "Причина"), F_DATE, ("leave_order", "Наказ про відпустку (дата, номер)"),
+              ("days", "Невикористані дні"),
               ("when", "Коли надати")], "Закон України «Про відпустки»"),
     Template("v_schedule", "v", "Щорічні відпустки", "Про затвердження графіка відпусток на {year} рік",
              "Відповідно до статті 10 Закону України «Про відпустки», статті 79 Кодексу законів про працю України, "
@@ -448,6 +453,29 @@ TEMPLATES: list[Template] = [
 ]
 
 TEMPLATE_BY_ID = {t.id: t for t in TEMPLATES}
+
+# Зв'язок наказів (як у HRMIS): поле шаблону → шаблони, наказ за якими можна вибрати з реєстру.
+# Поле "order" заповнює пару {order_date} і {order_no}; інше поле – «дд.мм.рррр № індекс».
+REFS: dict[str, dict[str, tuple[str, ...]]] = {
+    "k_duties_stop": {"duty_order": ("k_duties",)},
+    "k_reinstate": {"dismiss_order": ("k_dismiss",)},
+    "k_childcare_return": {"leave_order": ("v_social", "v_unpaid")},
+    "k_military_return": {"military_order": ("k_military",)},
+    "v_recall": {"leave_order": ("v_annual",)},
+    "v_transfer": {"leave_order": ("v_annual",)},
+    "v_dayoff": {"work_order": ("k_weekend",)},
+    "v_trip_change": {"order": ("v_trip",)},
+    "v_reprimand_remove": {"order": ("v_reprimand",)},
+}
+
+
+def ref_values(field_key: str, row) -> dict[str, str]:
+    """Значення полів шаблону з вибраного наказу-підстави."""
+    from .db import format_date
+    date, idx = format_date(row["date"]), row["reg_index"] or ""
+    if field_key == "order":
+        return {"order_date": date, "order_no": idx}
+    return {field_key: f"{date} № {idx}"}
 
 _PH = re.compile(r"\{(\w+)(?:\.(\w+))?\}")
 
