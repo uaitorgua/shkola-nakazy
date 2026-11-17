@@ -53,3 +53,47 @@ def _rotate(db_path: str, keep: int):
     files = [f for f in list_backups(db_path) if "before-" not in os.path.basename(f)]
     for f in files[keep:]:
         os.remove(f)
+
+
+REASONS = {"start": "під час запуску", "manual": "вручну", "before-restore": "перед відновленням",
+           "before-import": "перед імпортом бази"}
+
+
+def describe(path: str) -> tuple[str, str]:
+    """(дата й час, причина) з назви копії nakazy-YYYYmmdd-HHMMSS-ffffff-<причина>.db."""
+    import re
+    m = re.match(r"nakazy-(\d{8})-(\d{6})-\d+-(.+)\.db$", os.path.basename(path))
+    if not m:
+        return "", os.path.basename(path)
+    d, t, reason = m.groups()
+    when = f"{d[6:8]}.{d[4:6]}.{d[:4]} {t[:2]}:{t[2:4]}"
+    if reason.startswith("before-migration-v"):
+        return when, "перед оновленням програми (будова бази)"
+    return when, REASONS.get(reason, reason)
+
+
+def check_file(path: str, current_version: int) -> tuple[bool, str, int]:
+    """Чи це база «Накази ШКОЛА»: (так/ні, пояснення, кількість наказів)."""
+    try:
+        con = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        try:
+            ver = con.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
+            n = con.execute("SELECT COUNT(*) FROM orders").fetchone()[0]
+        finally:
+            con.close()
+    except sqlite3.Error:
+        return False, "Це не база «Накази ШКОЛА» або файл пошкоджено.", 0
+    v = int(ver[0]) if ver else 0
+    if v > current_version:
+        return False, "Файл створено новішою версією програми. Спершу оновіть «Накази ШКОЛА».", n
+    return True, f"Наказів у файлі: {n}.", n
+
+
+def export_to(db_con: sqlite3.Connection, dest: str) -> str:
+    """Цілісна копія відкритої бази у вибраний файл (SQLite backup API)."""
+    out = sqlite3.connect(dest)
+    try:
+        db_con.backup(out)
+    finally:
+        out.close()
+    return dest

@@ -492,7 +492,8 @@ def fill(text: str, values: dict[str, str]) -> str:
     return _PH.sub(sub, text)
 
 
-P_JUST = "<p align='justify' style='margin:0; text-indent:0'>"
+# абзацний відступ 10 мм (ДСТУ 4163:2020 п. 7.7) = 37.8 px при 96 dpi; «НАКАЗУЮ:» – без відступу (р. III п. 1)
+P_JUST = "<p align='justify' style='margin:0; text-indent:37.8px'>"
 
 
 def render(t: Template, values: dict[str, str]) -> tuple[str, str]:

@@ -319,6 +319,9 @@ class OrderEditor(QMainWindow):
         self.timer.timeout.connect(self.sync_now)
         QShortcut(QKeySequence.Save, self, activated=self.save)
         self._build_dock(row)
+        for sig in (self.title_e.textChanged, self.signer.textChanged, self.date.dateChanged, self.acting.toggled):
+            sig.connect(lambda *_: self._refresh_frame())
+        self._refresh_frame()
         if self.imported:
             self.statusBar().showMessage("Архівний наказ (імпорт): можна виправити розпізнаний текст і заголовок; "
                                          "оригінал файла збережено.")
@@ -330,6 +333,69 @@ class OrderEditor(QMainWindow):
 
     def html(self) -> str:
         return self.text.html()
+
+    def _refresh_frame(self):
+        """Шапка й підпис на аркуші – як у збереженому наказі (export.py): бланк, «НАКАЗ», дата – місце – номер,
+        заголовок; підпис з розшифруванням на 125 мм; «З наказом ознайомлені» за налаштуванням."""
+        import html as _h
+
+        from PySide6.QtGui import QPixmap
+        from .text_editor import MARGINS, MM, PAGE_W, SIGN_MM
+        db, size = self.db, self.text.font_size
+        row = db.get(self.order_id)
+        css = f"font-family:'Times New Roman'; color:#000;"
+        text_w = int((PAGE_W - MARGINS[0] - MARGINS[1]) * MM)
+        widgets = []
+        blank = db.default_blank() or {"mode": "text", "fields": {}, "data": None}
+        f = blank.get("fields") or {}
+        if blank.get("mode") == "image" and blank.get("data"):
+            pm = QPixmap(); pm.loadFromData(blank["data"])
+            w = int(min(float(f.get("width_mm") or 170), 170) * MM)
+            lab = QLabel(); lab.setAlignment(Qt.AlignHCenter)
+            lab.setPixmap(pm.scaledToWidth(w, Qt.SmoothTransformation)); widgets.append(lab)
+        elif blank.get("mode") == "docx" and blank.get("data"):
+            lab = QLabel(f"<i>Бланк закладу з файла {_h.escape(f.get('filename') or 'DOCX')} – "
+                         "у збереженому наказі</i>")
+            lab.setAlignment(Qt.AlignHCenter); lab.setStyleSheet("color:#777; border:1px dashed #bbb; padding:8px")
+            widgets.append(lab)
+        else:
+            school = db.get_setting("school")
+            lines = []
+            for key, sz, bold in (("owner", size - 2, False), ("school", size, True), ("address", size - 3, False)):
+                t = f.get(key) or (school if key == "school" else "")
+                if t:
+                    t = _h.escape(t)
+                    lines.append(f"<div style=\"{css} font-size:{sz}pt\">{'<b>' + t + '</b>' if bold else t}</div>")
+            if lines:
+                lab = QLabel("".join(lines)); lab.setAlignment(Qt.AlignHCenter); lab.setWordWrap(True)
+                widgets.append(lab)
+        city = db.get_setting("city")
+        place = ("м. " + city) if city and not city.startswith(("м.", "с.", "смт")) else (city or "")
+        date = self.date.date().toString("dd.MM.yyyy") if not self.readonly or row["date"] else "____________"
+        number = row["reg_index"] or "______"
+        gap = int(12 * 96 / 72)  # 12 пт між реквізитами, як у збереженому наказі
+        if not f.get("has_nakaz"):
+            lab = QLabel(f"<b style=\"{css} font-size:{size}pt\">НАКАЗ</b>"); lab.setAlignment(Qt.AlignHCenter)
+            lab.setContentsMargins(0, gap, 0, 0); widgets.append(lab)
+        lab = QLabel(f"<table width={text_w} cellspacing=0 cellpadding=0 style=\"{css} font-size:{size}pt\"><tr>"
+                     f"<td align=left>{date}</td><td align=center>{_h.escape(place)}</td>"
+                     f"<td align=right>№ {_h.escape(number)}</td></tr></table>")
+        lab.setContentsMargins(0, gap, 0, 0); widgets.append(lab)
+        lab = QLabel(f"<b style=\"{css} font-size:{size}pt\">{_h.escape(self.title_e.text())}</b>")
+        lab.setWordWrap(True); lab.setContentsMargins(0, gap, 0, gap); widgets.append(lab)
+        position = "В. о. директора" if self.acting.isChecked() else db.get_setting("head_position", "Директор")
+        sign_w = int(SIGN_MM * MM)
+        foot = (f"<table cellspacing=0 cellpadding=0 style=\"{css} font-size:{size}pt\"><tr>"
+                f"<td width={sign_w}>{_h.escape(position)}</td><td>{_h.escape(self.signer.text())}</td></tr></table>")
+        if db.get_setting("acquaint") == "1":
+            from ..export import dstu_signature
+            names = [dstu_signature(x) for x in (self.responsible.text() or "").split(",") if x.strip()]
+            foot += f"<p style=\"{css} font-size:{size}pt; margin-top:18pt\">З наказом ознайомлені:</p>"
+            for name in names or ["", "", ""]:
+                foot += (f"<table width={text_w} cellspacing=0 cellpadding=0 style=\"{css} font-size:{size}pt; "
+                         f"margin-top:8pt\"><tr><td>____________</td><td>{_h.escape(name) or '______________________'}"
+                         "</td><td align=right>____________</td></tr></table>")
+        self.text.set_frame(widgets, foot)
 
     def _text_changed(self):
         if self.text.isModified() and not self.windowTitle().startswith("● "):

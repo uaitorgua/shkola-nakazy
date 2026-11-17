@@ -60,7 +60,8 @@ class MainWindow(QMainWindow):
                        ("Зареєструвати", self.register_current), ("Наказ про зміни", self.amend_current),
                        ("Скасувати", self.cancel_current), ("Зберегти DOCX/PDF…", self.export_current)),
                       (("Журнал…", self.export_journal), ("Справи…", self.open_cases), ("Перевірка", self.run_audit),
-                       ("Люди…", self.open_people), ("Графік відпусток…", self.open_leave_plan), ("Імпорт наказів…", self.import_orders), ("Заклад…", self.settings))):
+                       ("Люди…", self.open_people), ("Графік відпусток…", self.open_leave_plan), ("Імпорт наказів…", self.import_orders), ("Дані й копії…", self.open_data),
+                       ("Заклад…", self.settings))):
             row = QHBoxLayout()
             for text, slot in group:
                 b = QPushButton(text); b.clicked.connect(slot); row.addWidget(b)
@@ -247,6 +248,29 @@ class MainWindow(QMainWindow):
     def open_cases(self):
         from .cases_dialog import CasesDialog
         CasesDialog(self, self.db, self.year.currentData()).exec()
+
+    def open_data(self):
+        from .data_dialog import DataDialog
+        DataDialog(self, self).exec()
+
+    def replace_db(self, src: str):
+        """Відновлення бази з копії чи файла: закрити вікна й базу, зберегти поточну копією, замінити,
+        відкрити знову (старіша будова бази оновиться з копією перед оновленням)."""
+        from PySide6.QtWidgets import QApplication
+
+        from ..backup import restore_backup
+        from ..db import Database
+        from .order_editor import OrderEditor
+        for w in QApplication.topLevelWidgets():
+            if isinstance(w, OrderEditor) or w is getattr(self, "_people", None):
+                w.close()
+        path = self.db.path
+        self.db.close()
+        try:
+            restore_backup(path, src)
+        finally:
+            self.db = Database(path)
+        self.refresh()
 
     def open_leave_plan(self):
         from .leave_plan_dialog import LeavePlanDialog

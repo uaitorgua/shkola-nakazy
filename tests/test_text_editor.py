@@ -25,7 +25,7 @@ class TextEditorTest(unittest.TestCase):
         from nakazy.export import MARGINS as EXPORT_MARGINS
         self.assertEqual(MARGINS, EXPORT_MARGINS)  # поля в редакторі = поля збереженого наказу
         t = TextEditor("<p>Текст</p>")
-        m = t.edit.viewportMargins()
+        m = t.page.layout().contentsMargins()  # поля аркуша A4
         self.assertEqual((m.left(), m.right()), (int(30 * MM), int(10 * MM)))
         self.assertNotIn("-qt-table-type: root", t.html())  # поля не потрапляють у текст наказу
         self.assertFalse(t.isModified())

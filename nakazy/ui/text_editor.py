@@ -1,64 +1,106 @@
-"""Простий вбудований редактор тексту наказу (не InterText): форматування, вирівнювання, відступи,
-списки, таблиці; сторінка з полями наказу. Повніше редагування – «Відкрити в іншій програмі».
+"""Простий вбудований редактор тексту наказу (не InterText): аркуш A4 з реквізитами наказу і текстом.
 
-Поля сторінки – як у збереженому наказі (export.MARGINS: ліве 30, праве 10, верхнє 20, нижнє 20 мм,
-Інструкція МОН № 676, дод. 1 п. 2). Відступи сумісні з перетворенням у DOCX (shkola/export/html_docx.py:
-рівень відступу = 0,4 дюйма, абзацний відступ – text-indent у px при 96 dpi).
+Оформлення за нормами, звіреними з першоджерелами (PLAN.md, розд. 1):
+- поля 30 / 10 / 20 / 20 мм, кегль 12–14 пт, Times New Roman – Інструкція МОН № 676, дод. 1 пп. 1–2;
+- «НАКАЗ» великими, дата – місце – номер, заголовок «Про…» – дод. 1 п. 3; р. III п. 1 («НАКАЗУЮ:» з нового
+  рядка без відступу);
+- абзацний відступ 10 мм, розшифрування підпису на 125 мм від лівого поля – ДСТУ 4163:2020 п. 7.7;
+- дата ДД.ММ.РРРР – ДСТУ 4163:2020 п. 5.10; підпис «Власне ім'я ПРІЗВИЩЕ» – п. 5.22.
+Шапку (бланк, «НАКАЗ», дата/місце/№, заголовок) і підпис показує картка наказу з реквізитів; редагується
+лише текст між ними. Відступи сумісні з перетворенням у DOCX (shkola/export/html_docx.py: рівень відступу
+0,4 дюйма, абзацний відступ – text-indent у px при 96 dpi).
 """
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QFont, QTextBlockFormat, QTextCharFormat, QTextCursor, QTextFrameFormat, QTextListFormat, \
-    QTextTableFormat, QTextLength
+from PySide6.QtGui import QFont, QTextBlockFormat, QTextCharFormat, QTextFrameFormat, QTextLength, QTextListFormat, \
+    QTextTableFormat
 from PySide6.QtWidgets import (
-    QComboBox, QDialog, QDialogButtonBox, QFormLayout, QSpinBox, QTextEdit, QToolBar, QVBoxLayout, QWidget, QLabel,
+    QComboBox, QDialog, QDialogButtonBox, QFormLayout, QFrame, QLabel, QMenu, QScrollArea, QSizePolicy, QSpinBox,
+    QTextEdit, QToolBar, QToolButton, QVBoxLayout, QWidget,
 )
 
 MM = 96 / 25.4                    # px на мм (96 dpi, як у перетворювачі DOCX)
-MARGINS = (30, 10, 20, 20)        # ліве, праве, верхнє, нижнє, мм – як export.MARGINS
-FIRST_LINE_MM = 12.5              # абзацний відступ 1,25 см
+MARGINS = (30, 10, 20, 20)        # ліве, праве, верхнє, нижнє, мм – як export.MARGINS (дод. 1 п. 2)
+PAGE_W = 210                      # A4, мм
+PARA_MM = 10                      # абзацний відступ, ДСТУ 4163:2020 п. 7.7
+SIGN_MM = 125                     # розшифрування підпису, ДСТУ 4163:2020 п. 7.7
 INDENT_PX = 0.4 * 96              # крок відступу: 0,4 дюйма (html_docx)
 
 
-class _PageEdit(QTextEdit):
-    """Сторінка: поля показуються відступом області перегляду (не в документі – інакше Qt загортає текст
-    у кореневу таблицю, і DOCX ламається); рядки переносяться на ширині тексту A4 (210 − 30 − 10 мм)."""
+class _AutoEdit(QTextEdit):
+    """Текст наказу на аркуші: без власної прокрутки, висота за вмістом (прокручується весь аркуш)."""
 
     def __init__(self):
         super().__init__()
-        self.setViewportMargins(int(MARGINS[0] * MM), int(MARGINS[2] * MM), int(MARGINS[1] * MM), int(MARGINS[3] * MM))
-        self.setLineWrapMode(QTextEdit.FixedPixelWidth)
-        self.setLineWrapColumnOrWidth(int((210 - MARGINS[0] - MARGINS[1]) * MM))
+        self.setFrameShape(QFrame.NoFrame)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.document().documentLayout().documentSizeChanged.connect(self._fit)
+        self.document().setDocumentMargin(0)
+
+    def _fit(self, *_):
+        self.setFixedHeight(max(int(self.document().size().height()) + 6, int(40 * MM)))
 
 
 class TextEditor(QWidget):
-    """Текст наказу: панель форматування + сторінка A4 з полями."""
+    """Панель форматування + аркуш A4: шапка наказу (head), текст (edit), підпис (foot)."""
     changed = Signal()
 
     def __init__(self, html: str = "", parent=None, font_size: int = 14):
         super().__init__(parent)
-        self.edit = _PageEdit(); self.edit.setAcceptRichText(True)
+        self.font_size = font_size
+        font_css = f"font-family: 'Times New Roman'; font-size: {font_size}pt; color: #000;"
+        self.edit = _AutoEdit(); self.edit.setAcceptRichText(True)
         doc = self.edit.document()
         doc.setDefaultFont(QFont("Times New Roman", font_size))
         doc.setIndentWidth(INDENT_PX)
         # шрифт наказу задається і стилем: тема програми інакше підміняє шрифт документа
-        self.edit.setStyleSheet("QTextEdit { background: #ffffff; color: #000000; "
-                                f"font-family: 'Times New Roman'; font-size: {font_size}pt; }}")
+        self.edit.setStyleSheet(f"QTextEdit {{ background: #fff; border: none; padding: 0; margin: 0; {font_css} }}")
+        self.head = QWidget(); self.head_l = QVBoxLayout(self.head)
+        self.head_l.setContentsMargins(0, 0, 0, int(3 * MM)); self.head_l.setSpacing(0)
+        self.foot = QLabel(); self.foot.setTextFormat(Qt.RichText); self.foot.setWordWrap(True)
+        self.foot.setStyleSheet(font_css)
+        page = QWidget(); page.setObjectName("page")
+        page.setFixedWidth(int(PAGE_W * MM))
+        page.setStyleSheet("#page { background: #fff; border: 1px solid #c8c8c8; }")
+        pl = QVBoxLayout(page); pl.setSpacing(0)
+        pl.setContentsMargins(int(MARGINS[0] * MM), int(MARGINS[2] * MM), int(MARGINS[1] * MM), int(MARGINS[3] * MM))
+        pl.addWidget(self.head); pl.addWidget(self.edit); pl.addSpacing(int(8 * MM)); pl.addWidget(self.foot)
+        pl.addStretch(1)
+        page.setMinimumHeight(int(297 * MM))
+        self.page = page
+        holder = QWidget(); holder.setObjectName("holder"); hl = QVBoxLayout(holder); hl.setContentsMargins(16, 16, 16, 16)
+        holder.setStyleSheet("#holder { background: #e9e9e9; }")
+        hl.addWidget(page, 0, Qt.AlignHCenter | Qt.AlignTop)
+        self.scroll = QScrollArea(); self.scroll.setWidgetResizable(True); self.scroll.setWidget(holder)
         self.bar = QToolBar(); self.bar.setMovable(False)
-        self.font_size = font_size
         self._actions()
-        hint = QLabel(f"Поля сторінки: ліве {MARGINS[0]}, праве {MARGINS[1]}, верхнє й нижнє {MARGINS[2]} мм "
-                      "(Інструкція МОН № 676, дод. 1 п. 2)")
-        hint.setStyleSheet("color: #666; font-size: 11px")
+        hint = QLabel(f"Аркуш A4: поля {MARGINS[0]}/{MARGINS[1]}/{MARGINS[2]}/{MARGINS[3]} мм, Times New Roman "
+                      f"{font_size} пт, абзацний відступ {PARA_MM} мм (Інструкція МОН № 676, дод. 1; ДСТУ 4163:2020 "
+                      "п. 7.7). Шапка й підпис – з реквізитів праворуч.")
+        hint.setWordWrap(True); hint.setStyleSheet("color: #666; font-size: 11px")
         v = QVBoxLayout(self); v.setContentsMargins(0, 0, 0, 0); v.setSpacing(2)
-        v.addWidget(self.bar); v.addWidget(self.edit, 1); v.addWidget(hint)
+        v.addWidget(self.bar); v.addWidget(self.scroll, 1); v.addWidget(hint)
         self.setHtml(html)
         doc.contentsChanged.connect(self.changed)
         self.edit.cursorPositionChanged.connect(self._sync_bar)
 
+    # шапка й підпис (з реквізитів наказу)
+    def set_frame(self, head_widgets: list, foot_html: str):
+        while self.head_l.count():
+            w = self.head_l.takeAt(0).widget()
+            if w:
+                w.deleteLater()
+        for w in head_widgets:
+            self.head_l.addWidget(w)
+        self.foot.setText(foot_html)
+
     # вміст
     def setHtml(self, html: str):
         self.edit.setHtml(html or "")
+        self.edit._fit()
         self.edit.document().setModified(False)
 
     def html(self) -> str:
@@ -82,30 +124,30 @@ class TextEditor(QWidget):
         e = self.edit
         self._act("↶", "Скасувати (Ctrl+Z)", e.undo); self._act("↷", "Повторити (Ctrl+Y)", e.redo)
         self.bar.addSeparator()
-        self.size = QComboBox(); self.size.addItems(["12", "13", "14"]); self.size.setToolTip("Розмір шрифту, пт")
-        self.size.setCurrentText(str(self.font_size)); self.size.activated.connect(lambda _i: self._char(size=int(self.size.currentText())))
+        self.size = QComboBox(); self.size.addItems(["12", "13", "14"])
+        self.size.setToolTip("Розмір шрифту, пт (дод. 1 п. 1: 12–14)")
+        self.size.setCurrentText(str(self.font_size))
+        self.size.activated.connect(lambda _i: self._char(size=int(self.size.currentText())))
         self.bar.addWidget(self.size)
         self.a_b = self._act("Ж", "Жирний (Ctrl+B)", lambda on: self._char(bold=on), True)
         self.a_i = self._act("К", "Курсив (Ctrl+I)", lambda on: self._char(italic=on), True)
         self.a_u = self._act("Ч", "Підкреслений (Ctrl+U)", lambda on: self._char(under=on), True)
-        f = self.a_b.font(); f.setBold(True); self.a_b.setFont(f)
-        f = self.a_i.font(); f.setItalic(True); self.a_i.setFont(f)
-        f = self.a_u.font(); f.setUnderline(True); self.a_u.setFont(f)
-        for a, key in ((self.a_b, "Ctrl+B"), (self.a_i, "Ctrl+I"), (self.a_u, "Ctrl+U")):
-            a.setShortcut(key)
+        for a, key, attr in ((self.a_b, "Ctrl+B", "setBold"), (self.a_i, "Ctrl+I", "setItalic"),
+                             (self.a_u, "Ctrl+U", "setUnderline")):
+            f = a.font(); getattr(f, attr)(True); a.setFont(f); a.setShortcut(key)
         self.bar.addSeparator()
         self.aligns = {}
         for text, tip, al in (("≡←", "Ліворуч", Qt.AlignLeft), ("≡↔", "По центру", Qt.AlignHCenter),
                               ("≡→", "Праворуч", Qt.AlignRight), ("≡≡", "За шириною", Qt.AlignJustify)):
             self.aligns[al] = self._act(text, tip, lambda _=False, al=al: self.edit.setAlignment(al), True)
         self.bar.addSeparator()
-        self.a_first = self._act("¶ 1,25", "Абзацний відступ першого рядка 1,25 см", self._first_line, True)
+        self.a_first = self._act(f"¶ {PARA_MM} мм", f"Абзацний відступ {PARA_MM} мм (ДСТУ 4163:2020 п. 7.7)",
+                                 self._first_line, True)
         self._act("⇤", "Зменшити відступ", lambda: self._indent(-1))
         self._act("⇥", "Збільшити відступ", lambda: self._indent(1))
         self._act("1.", "Нумерований список", lambda: self._list(QTextListFormat.ListDecimal))
         self._act("•", "Маркований список", lambda: self._list(QTextListFormat.ListDisc))
         self.bar.addSeparator()
-        from PySide6.QtWidgets import QMenu, QToolButton
         tb = QToolButton(); tb.setText("Таблиця"); tb.setToolTip("Таблиця: вставити, рядки, стовпці, об'єднання")
         tb.setPopupMode(QToolButton.InstantPopup)
         m = QMenu(tb)
@@ -133,7 +175,7 @@ class TextEditor(QWidget):
         self.edit.mergeCurrentCharFormat(fmt); self.edit.setFocus()
 
     def _first_line(self, on):
-        c = self.edit.textCursor(); b = QTextBlockFormat(); b.setTextIndent(FIRST_LINE_MM * MM if on else 0)
+        c = self.edit.textCursor(); b = QTextBlockFormat(); b.setTextIndent(PARA_MM * MM if on else 0)
         c.mergeBlockFormat(b)
 
     def _indent(self, step):
