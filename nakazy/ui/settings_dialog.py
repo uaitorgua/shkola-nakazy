@@ -64,9 +64,33 @@ class SettingsDialog(QDialog):
         bf.addRow(self.has_nakaz)
         bf.addRow(QLabel("Бланк друкується лише на першій сторінці наказу; поля 30/10/20/20 мм (дод. 1 п. 2)."))
         box = QGroupBox("Бланк наказу"); box.setLayout(bf)
+        # редактор тексту наказів (окрема програма)
+        from ..external_edit import office_exe
+        self.editor = QComboBox()
+        self.editor.addItem("Автоматично: «Офіс ШКОЛА», якщо встановлений, інакше програма Windows для DOCX", "auto")
+        self.editor.addItem("Програма Windows для DOCX (Word, LibreOffice…)", "system")
+        self.editor.addItem("Інша програма…", "custom")
+        self.editor.setCurrentIndex(max(0, self.editor.findData(g("editor", "auto"))))
+        self.editor_path = g("editor_path")
+        self.editor_lbl = QLabel(self.editor_path or "")
+        self.editor.activated.connect(self._pick_editor)
+        ef = QFormLayout()
+        ef.addRow("Відкривати текст у", self.editor)
+        ef.addRow("", self.editor_lbl)
+        ef.addRow(QLabel("«Офіс ШКОЛА»: " + ("встановлено" if office_exe() else "не знайдено (безкоштовно в Microsoft Store)")))
+        ebox = QGroupBox("Редактор тексту наказів"); ebox.setLayout(ef)
         bb = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         bb.accepted.connect(self._save); bb.rejected.connect(self.reject)
-        v = QVBoxLayout(self); v.addLayout(top); v.addWidget(box); v.addWidget(bb)
+        v = QVBoxLayout(self); v.addLayout(top); v.addWidget(box); v.addWidget(ebox); v.addWidget(bb)
+
+    def _pick_editor(self, _i=None):
+        if self.editor.currentData() != "custom":
+            return
+        path, _ = QFileDialog.getOpenFileName(self, "Програма для редагування", "", "Програми (*.exe)")
+        if path:
+            self.editor_path = path; self.editor_lbl.setText(path)
+        elif not self.editor_path:
+            self.editor.setCurrentIndex(0)
 
     def _pick(self):
         flt = "Бланк (*.png *.jpg *.jpeg *.docx)"
@@ -82,7 +106,8 @@ class SettingsDialog(QDialog):
         for k, v in (("school", self.school.text()), ("city", self.city.text()), ("head", self.head.text()),
                      ("head_position", self.head_pos.text()), ("font_size", str(self.size.value())),
                      ("acquaint", "1" if self.acquaint.isChecked() else "0"), ("grif_indent", self.grif.currentData()),
-                     ("head_genitive", self.head_gen.text())):
+                     ("head_genitive", self.head_gen.text()), ("editor", self.editor.currentData()),
+                     ("editor_path", self.editor_path or "")):
             self.db.set_setting(k, v.strip())
         mode = self.mode.currentData()
         fields = {"owner": self.owner.text().strip(), "school": self.bschool.text().strip(),

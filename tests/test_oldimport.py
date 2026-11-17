@@ -150,8 +150,9 @@ class Gui(unittest.TestCase):
         self.assertEqual(sorted(r["reg_index"] for r in db.list_orders()), ["15-к", "7"])
         oid = [r for r in db.list_orders() if r["reg_index"] == "7"][0]["id"]
         ed = OrderEditor(db, oid); app.processEvents()
-        self.assertFalse(ed.edit.isReadOnly())
-        ed.edit.setPlainText("Виправлений текст"); ed.save_fix()
+        self.assertTrue(ed.can_edit)
+        from edit_helper import edit_externally
+        self.assertTrue(edit_externally(ed, replace_body="Виправлений текст"))
         self.assertIn("Виправлений текст", db.get(oid)["body_html"])
 
 

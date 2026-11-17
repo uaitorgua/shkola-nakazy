@@ -1,17 +1,17 @@
-"""Редактор наказу: InterText (зі «Сканер ШКОЛА») + панель реквізитів, збереження в базу."""
+"""Майстер шаблону і картка наказу. Текст наказу редагується в окремій програмі (nakazy/external_edit.py)."""
 from __future__ import annotations
 
+import os
 import re
 
-from PySide6.QtCore import QDate, Qt, Signal
+from PySide6.QtCore import QDate, QFileSystemWatcher, Qt, QTimer, QUrl, Signal
+from PySide6.QtGui import QDesktopServices, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QDateEdit, QDialog, QDialogButtonBox, QDockWidget, QFileDialog, QFormLayout,
-    QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QPushButton,
-    QAbstractItemView, QScrollArea, QTableWidget, QTableWidgetItem, QTreeWidget, QTreeWidgetItem, QVBoxLayout,
-    QWidget,
+    QAbstractItemView, QCheckBox, QComboBox, QDateEdit, QDialog, QDialogButtonBox, QDockWidget, QFileDialog,
+    QFormLayout, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMainWindow,
+    QMessageBox, QPushButton, QScrollArea, QTableWidget, QTableWidgetItem, QTextBrowser, QTreeWidget,
+    QTreeWidgetItem, QVBoxLayout, QWidget,
 )
-
-from shkola.ui.editor_window import EditorWindow
 
 from ..db import KINDS, KIND_BY_CODE, Database, OrderLocked, check_structure, format_date
 from ..templates import REFS, TEMPLATE_BY_ID, TEMPLATES, group_fields, ref_values, render, render_group
@@ -281,22 +281,120 @@ class TemplatePicker(QDialog):
         return out
 
 
-class OrderEditor(EditorWindow):
+class OrderEditor(QMainWindow):
+    """Картка наказу: реквізити, додатки, перегляд тексту. Текст редагується в окремій програмі
+    («Офіс ШКОЛА» або програма Windows для DOCX), зміни після збереження файла забираються в базу."""
     saved = Signal(int)
 
     def __init__(self, db: Database, order_id: int, parent=None):
+        super().__init__(parent)
         self.db, self.order_id = db, order_id
         row = db.get(order_id)
-        super().__init__(parent, html=row["body_html"], title=row["title"] or "Наказ")
         self.readonly = row["status"] != "draft"
         self.imported = row["source"] == "import"
+        self.can_edit = not self.readonly or self.imported
+        self.edit_file: str | None = None
+        self.setWindowTitle(f"{row['title'] or 'Наказ'} · Накази ШКОЛА")
+        self.resize(1200, 760)
+        self.view = QTextBrowser(); self.view.setOpenExternalLinks(False)
+        from PySide6.QtGui import QFont
+        self.view.document().setDefaultFont(QFont("Times New Roman", 13))  # як у наказі (дод. 1: 12–14 пт)
+        self.view.document().setDefaultStyleSheet("body, p, td { font-family: 'Times New Roman'; font-size: 13pt; }")
+        self.view.document().setDocumentMargin(28)
+        bar = QHBoxLayout()
+        if self.can_edit:
+            self.edit_btn = QPushButton("Редагувати текст"); self.edit_btn.clicked.connect(self.start_edit)
+            self.edit_btn.setDefault(True); self.edit_btn.setMinimumHeight(32)
+            self.edit_btn.setToolTip("Відкрити текст у «Офіс ШКОЛА» або в програмі для DOCX; після збереження "
+                                     "файла зміни з'являться тут")
+            self.pull_btn = QPushButton("Забрати зміни з файла"); self.pull_btn.clicked.connect(self.sync_now)
+            self.pull_btn.setEnabled(False)
+            bar.addWidget(self.edit_btn); bar.addWidget(self.pull_btn)
+        else:
+            b = QPushButton("Відкрити копію для перегляду"); b.clicked.connect(self.open_copy); bar.addWidget(b)
+        bar.addStretch()
+        central = QWidget(); cv = QVBoxLayout(central); cv.addLayout(bar); cv.addWidget(self.view, 1)
+        self.setCentralWidget(central)
+        self.watcher = QFileSystemWatcher(self); self.watcher.fileChanged.connect(self._file_changed)
+        self.timer = QTimer(self); self.timer.setSingleShot(True); self.timer.setInterval(800)
+        self.timer.timeout.connect(self.sync_now)
+        QShortcut(QKeySequence.Save, self, activated=self.save)
         self._build_dock(row)
+        self._show_text()
         if self.imported:
             self.statusBar().showMessage("Архівний наказ (імпорт): можна виправити розпізнаний текст і заголовок; "
                                          "оригінал файла збережено.")
         elif self.readonly:
-            self.edit.setReadOnly(True)
             self.statusBar().showMessage("Наказ зареєстровано: лише перегляд. Зміни вносяться новим наказом.")
+        else:
+            self.statusBar().showMessage("Текст наказу редагується кнопкою «Редагувати текст».")
+
+    def html(self) -> str:
+        return self.db.get(self.order_id)["body_html"]
+
+    def _show_text(self):
+        import html as _h
+        row = self.db.get(self.order_id)
+        self.view.setHtml(f"<p align=center><b>{_h.escape(row['title'] or '')}</b></p>{row['body_html'] or ''}")
+
+    # редагування в окремій програмі
+    def start_edit(self):
+        from ..external_edit import OFFICE_STORE, OFFICE_WEB, NoEditor, open_file, write_docx
+        if not self.readonly:
+            self.save_order(quiet=True)
+        self.edit_file = write_docx(self.db, self.order_id)
+        self._watch()
+        self.pull_btn.setEnabled(True)
+        try:
+            name = open_file(self.db, self.edit_file)
+        except NoEditor:
+            r = QMessageBox.question(
+                self, "Редагування тексту",
+                "На комп'ютері немає програми для документів DOCX.\n\nВстановити «Офіс ШКОЛА» з Microsoft Store? "
+                "Після встановлення натисніть «Редагувати текст» ще раз.\n\nАбо виберіть програму: «Заклад…» → "
+                "«Редактор тексту наказів».")
+            if r == QMessageBox.Yes and not QDesktopServices.openUrl(QUrl(OFFICE_STORE)):
+                QDesktopServices.openUrl(QUrl(OFFICE_WEB))
+            return
+        self.statusBar().showMessage(f"Текст відкрито: {name}. Збережіть файл у редакторі – зміни з'являться тут.")
+
+    def _watch(self):
+        if self.edit_file and os.path.exists(self.edit_file) and self.edit_file not in self.watcher.files():
+            self.watcher.addPath(self.edit_file)
+
+    def _file_changed(self, _path):
+        self.timer.start()  # редактори пишуть файл кількома кроками
+
+    def sync_now(self) -> bool:
+        from ..external_edit import sync
+        self._watch()  # деякі редактори замінюють файл новим
+        if not self.edit_file or not os.path.exists(self.edit_file):
+            return False
+        try:
+            changed = sync(self.db, self.order_id, self.edit_file)
+        except OrderLocked as e:
+            QMessageBox.warning(self, "Накази ШКОЛА", str(e)); return False
+        except Exception as e:  # файл ще зайнятий або пошкоджений: спробуємо при наступному збереженні
+            self.statusBar().showMessage(f"Не вдалося прочитати файл: {e}"); return False
+        if changed:
+            from datetime import datetime
+            row = self.db.get(self.order_id)
+            self.title_e.setText(row["title"]); self._show_text(); self._check()
+            self.setWindowTitle(f"{row['title']} · Накази ШКОЛА")
+            self.statusBar().showMessage(f"Зміни з редактора збережено в базу о {datetime.now():%H:%M}. "
+                                         "Попередня редакція – в історії.")
+            self.saved.emit(self.order_id)
+        return changed
+
+    def open_copy(self):
+        from ..external_edit import NoEditor, open_file, write_docx
+        try:
+            open_file(self.db, write_docx(self.db, self.order_id, copy=True))
+        except NoEditor:
+            QMessageBox.information(self, "Накази ШКОЛА", "Немає програми для DOCX. Скористайтеся «Зберегти наказ у "
+                                                          "DOCX/PDF» і відкрийте PDF.")
+        except Exception as e:
+            QMessageBox.warning(self, "Накази ШКОЛА", str(e))
 
     def _build_dock(self, row):
         w = QWidget(); f = QFormLayout(w)
@@ -378,29 +476,30 @@ class OrderEditor(EditorWindow):
                     date=self.date.date().toString("yyyy-MM-dd"), title=self.title_e.text().strip(),
                     basis=self.basis.text().strip(), signer=self.signer.text().strip(),
                     signer_acting=int(self.acting.isChecked()), controller=self.controller.text().strip(),
-                    responsible=self.responsible.text().strip(), notes=self.notes.text().strip(),
-                    body_html=self.html())
+                    responsible=self.responsible.text().strip(), notes=self.notes.text().strip())
 
     def _check(self):
         row = self.db.get(self.order_id)
         probs = check_structure(row) if row["status"] == "draft" else []
         self.warn.setText("".join(f"<p style='color:#a35b00'>⚠ {p.lstrip('!')}</p>" for p in probs))
 
-    def save_order(self):
+    def save_order(self, quiet: bool = False):
         if self.readonly:
             return
         try:
             self.db.update_draft(self.order_id, **self._values())
         except OrderLocked as e:
             QMessageBox.warning(self, "Накази ШКОЛА", str(e)); return
-        self.edit.document().setModified(False)
+        if quiet:
+            return
+        self._show_text()
         self.setWindowTitle(f"{self.title_e.text()} · Накази ШКОЛА")
         self.statusBar().showMessage("Збережено в базу")
         self._check(); self.saved.emit(self.order_id)
 
     def export_order(self):
-        if not self.readonly and self.edit.document().isModified():
-            self.save_order()
+        if not self.readonly:
+            self.save_order(quiet=True)
         from ..export import export_docx, export_pdf
         path, _ = QFileDialog.getSaveFileName(self, "Зберегти наказ", self.title_e.text()[:60], "PDF (*.pdf);;Word (*.docx)")
         if not path:
@@ -413,11 +512,11 @@ class OrderEditor(EditorWindow):
 
     def save_fix(self):
         try:
-            self.db.fix_imported(self.order_id, title=self.title_e.text().strip(), body_html=self.html(),
+            self.db.fix_imported(self.order_id, title=self.title_e.text().strip(),
                                  signer=self.signer.text().strip(), notes=self.notes.text().strip())
         except OrderLocked as e:
             QMessageBox.warning(self, "Накази ШКОЛА", str(e)); return
-        self.edit.document().setModified(False)
+        self._show_text()
         self.statusBar().showMessage("Виправлення збережено (попередня версія в історії)")
         self.saved.emit(self.order_id)
 
@@ -432,20 +531,16 @@ class OrderEditor(EditorWindow):
             fh.write(o["data"])
         os.startfile(path)  # відкрити у програмі за замовчуванням Windows
 
-    def save(self):  # Ctrl+S у стрічці InterText
+    def save(self):  # Ctrl+S
         self.save_fix() if self.imported else self.save_order()
 
     def closeEvent(self, e):
-        if self.imported and self.edit.document().isModified():
-            if QMessageBox.question(self, "Закрити", "Зберегти виправлення розпізнаного?") == QMessageBox.Yes:
-                self.save_fix()
-        elif not self.readonly and self.edit.document().isModified():
-            r = QMessageBox.question(self, "Закрити", "Зберегти зміни в базу?",
-                                     QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel)
-            if r == QMessageBox.Cancel:
-                e.ignore(); return
-            if r == QMessageBox.Save:
-                self.save_order()
+        if not getattr(self, "_closed", False):
+            self._closed = True
+            if self.edit_file and os.path.exists(self.edit_file):
+                self.sync_now()  # останні збережені в редакторі зміни
+            if not self.readonly:
+                self.save_order(quiet=True)
         e.accept()
 
 

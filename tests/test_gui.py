@@ -48,18 +48,22 @@ class Secretary(unittest.TestCase):
         mw.TemplatePicker = Picker
         self.w.new_order()
         ed = self.opened[-1]; oid = ed.order_id
-        # 2. редагування в InterText і збереження
+        # 2. реквізити в картці, текст в окремому редакторі (DOCX) – зміни забираються в базу
+        from edit_helper import edit_externally
         ed.date.setDate(ed.date.date().fromString("2026-11-03", "yyyy-MM-dd"))
-        ed.edit.append("Додатковий абзац.")
         ed.save_order()
+        self.assertTrue(edit_externally(ed, add="Додатковий абзац."))
         self.assertIn("Додатковий абзац", self.db.get(oid)["body_html"])
+        self.assertIn("Додатковий абзац", ed.view.toPlainText())
+        self.assertTrue(self.db.versions(oid))  # попередня редакція в історії
+        ed.close()
         # 3. реєстрація з вікна
         self.w.refresh(); self.select(oid); self.w.register_current()
         self.assertEqual(self.db.get(oid)["reg_index"], "1-у")
         # 4. спроба змінити зареєстрований: редактор лише для перегляду
         self.w.edit_current()
         ro = self.opened[-1]
-        self.assertTrue(ro.edit.isReadOnly())
+        self.assertFalse(ro.can_edit)
         ro.save_order()
         self.assertNotIn("зламано", self.db.get(oid)["body_html"])
         # 5. наказ про зміни

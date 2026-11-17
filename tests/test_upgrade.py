@@ -57,6 +57,16 @@ class UpgradeTest(unittest.TestCase):
         oid = create_from_template(db, "v_transfer", {}, persons={"employee": pid}, refs={"leave_order": leave})
         self.assertEqual([r["id"] for r in db.links_from(oid)], [leave])
         LeavePlan(db).add(2027, pid, days=28)
+        # чернетка, створена у старій версії, редагується в окремій програмі (з 0.1.5) без втрат
+        import docx
+
+        from nakazy import external_edit as ee
+        draft = db.con.execute("SELECT id FROM orders WHERE status='draft' AND template_id='o_attest'").fetchone()[0]
+        dpath = ee.write_docx(db, draft)
+        doc = docx.Document(dpath); doc.add_paragraph("Додано після оновлення."); doc.save(dpath)
+        self.assertTrue(ee.sync(db, draft, dpath))
+        self.assertIn("Додано після оновлення.", db.get(draft)["body_html"])
+        self.assertEqual(len(db.attachments(draft)), 3)  # додатки старої чернетки (2 шаблонні + файл) на місці
         db.close()
         # повторний запуск: схема та сама – копія «start», не нова міграція
         Database(path).close()
