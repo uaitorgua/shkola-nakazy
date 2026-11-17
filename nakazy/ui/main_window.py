@@ -60,7 +60,7 @@ class MainWindow(QMainWindow):
                        ("Зареєструвати", self.register_current), ("Наказ про зміни", self.amend_current),
                        ("Скасувати", self.cancel_current), ("Зберегти DOCX/PDF…", self.export_current)),
                       (("Журнал…", self.export_journal), ("Справи…", self.open_cases), ("Перевірка", self.run_audit),
-                       ("Люди…", self.open_people), ("Імпорт наказів…", self.import_orders), ("Заклад…", self.settings))):
+                       ("Люди…", self.open_people), ("Графік відпусток…", self.open_leave_plan), ("Імпорт наказів…", self.import_orders), ("Заклад…", self.settings))):
             row = QHBoxLayout()
             for text, slot in group:
                 b = QPushButton(text); b.clicked.connect(slot); row.addWidget(b)
@@ -247,6 +247,11 @@ class MainWindow(QMainWindow):
     def open_cases(self):
         from .cases_dialog import CasesDialog
         CasesDialog(self, self.db, self.year.currentData()).exec()
+
+    def open_leave_plan(self):
+        from .leave_plan_dialog import LeavePlanDialog
+        LeavePlanDialog(self, self.db, self.year.currentData()).exec()
+        self.refresh()
 
     def open_people(self):
         from .people_window import PeopleWindow

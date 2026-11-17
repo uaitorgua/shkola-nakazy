@@ -297,6 +297,55 @@ class Gui(unittest.TestCase):
         self.assertIsNone(tp.group)
         db.close()
 
+    def test_leave_plan(self):
+        """Графік відпусток: таблиця → наказ про затвердження з додатком → накази про відпустку."""
+        from PySide6.QtWidgets import QApplication
+        QApplication.instance() or QApplication([])
+        from nakazy.leave import summary
+        from nakazy.leave_plan import LeavePlan
+        from nakazy.ui.leave_plan_dialog import LeavePlanDialog
+        d = tempfile.mkdtemp(); db = Database(os.path.join(d, "p.db")); ppl = People(db)
+        db.set_setting("head", "Олена ПЕТРЕНКО")
+        a = ppl.add(kind="staff", last="Коваль", first="Марія", middle="Іванівна", position="вчитель", leave_right=56)
+        b = ppl.add(kind="staff", last="Білий", first="Микола", middle="Іванович", position="бібліотекар", leave_right=24)
+        c = ppl.add(kind="staff", last="Ткач", first="Наталія", middle="Олегівна", position="вчитель", leave_right=56)
+        plan = LeavePlan(db); y = "з 01.09.2025 по 31.08.2026"
+        ra = plan.add(2026, a, days=42, from_date="2026-07-01", to_date="2026-08-11", period=y)
+        rb = plan.add(2026, b, days=30, from_date="2026-07-15", to_date="2026-07-01", period=y)  # помилки
+        rc = plan.add(2026, c, days=28, from_date="2026-08-01", to_date="2026-08-28", period=y)
+        probs = plan.problems(2026)
+        self.assertTrue(any("Білий" in p and "раніше" in p for p in probs))
+        self.assertTrue(any("Білий" in p and "право 24" in p for p in probs))
+        so = plan.make_schedule_order(2026, "первинною профспілковою організацією")
+        att = db.attachments(so)[0]
+        self.assertTrue(att["approved"])
+        self.assertIn("Коваль Марія Іванівна", att["body_html"]); self.assertIn("01.07.2026", att["body_html"])
+        db.register(so, "2026-01-10")
+        one = plan.make_leave_orders([ra])
+        self.assertEqual(len(one), 1)
+        self.assertIn("про затвердження графіка відпусток", db.get(one[0])["body_html"])
+        self.assertEqual(plan.make_leave_orders([ra]), [])  # двічі не створюється
+        grp = plan.make_leave_orders([rb, rc], group=True)
+        self.assertEqual(db.get(grp[0])["title"], "Про надання щорічних відпусток працівникам")
+        for oid in one + grp:
+            db.register(oid, "2026-06-20")
+        self.assertEqual((summary(db, a)[0]["left"], summary(db, c)[0]["left"]), (14, 28))
+        db.cancel(one[0], "перенесено")  # скасований наказ – рядок знову без наказу
+        self.assertEqual(len(plan.make_leave_orders([ra])), 1)
+        # вікно: завантаження, правка клітинки, збереження, помилкова дата не записується
+        dlg = LeavePlanDialog(None, db, 2026)
+        self.assertEqual(dlg.table.rowCount(), 3)
+        dlg.table.item(0, 2).setText("40")
+        self.assertTrue(dlg.save(quiet=True))
+        self.assertEqual(db.con.execute("SELECT days FROM leave_plan WHERE id = ?", (ra,)).fetchone()[0], 40)
+        dlg.table.item(0, 3).setText("31.13.2026")
+        from unittest import mock
+        with mock.patch("nakazy.ui.leave_plan_dialog.QMessageBox.warning") as w:
+            self.assertFalse(dlg.save(quiet=True)); w.assert_called_once()
+        self.assertEqual(db.con.execute("SELECT from_date FROM leave_plan WHERE id = ?", (ra,)).fetchone()[0],
+                         "2026-07-01")
+        dlg.close(); db.close()
+
 from qt_cleanup import tearDownModule  # noqa: E402,F401
 
 if __name__ == "__main__":

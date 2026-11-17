@@ -549,7 +549,7 @@ def types_by_kind() -> dict[str, list[str]]:
 
 # документи, які наказ затверджує (план, графік, склад комісії, режим…)
 for _id in ("o_year_start", "o_attest", "o_attest_list", "o_qualification", "k_load", "o_duty", "o_olympiad",
-            "o_dpa", "o_pedrada"):
+            "o_dpa", "o_pedrada", "v_schedule"):
     TEMPLATE_BY_ID[_id].approve = True
 
 # групові накази (кілька працівників в одному наказі, як у HRMIS)

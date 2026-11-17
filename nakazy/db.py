@@ -12,7 +12,7 @@ import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 
 @dataclass(frozen=True)
@@ -110,6 +110,12 @@ CREATE TABLE IF NOT EXISTS leave_days (
     op TEXT NOT NULL,                        -- used | comp | back
     days INTEGER NOT NULL,
     PRIMARY KEY (order_id, person_id));      -- v7: груповий наказ – кілька працівників
+CREATE TABLE IF NOT EXISTS leave_plan (       -- v8: графік відпусток
+    id INTEGER PRIMARY KEY, year INTEGER NOT NULL,
+    person_id INTEGER NOT NULL REFERENCES people(id),
+    vtype TEXT NOT NULL DEFAULT 'основну', days INTEGER, from_date TEXT, to_date TEXT,
+    period TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '',
+    order_id INTEGER REFERENCES orders(id));
 CREATE TABLE IF NOT EXISTS blanks (
     id INTEGER PRIMARY KEY, name TEXT NOT NULL, mode TEXT NOT NULL,  -- 'text' | 'image' | 'docx'
     data BLOB, fields_json TEXT NOT NULL DEFAULT '{}', is_default INTEGER NOT NULL DEFAULT 0);
