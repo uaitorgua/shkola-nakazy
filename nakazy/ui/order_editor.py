@@ -16,6 +16,9 @@ from ..db import KINDS, KIND_BY_CODE, Database, OrderLocked, check_structure, fo
 from ..templates import REFS, TEMPLATE_BY_ID, TEMPLATES, ref_values, render
 
 
+LEAVE_TEMPLATES = ("v_annual", "v_compensation", "v_recall", "v_transfer")
+
+
 class TemplatePicker(QDialog):
     """Вибір шаблону (вид → тип → шаблон) і заповнення полів."""
 
@@ -168,6 +171,10 @@ class TemplatePicker(QDialog):
                 self.edits[k].setText(v)
         if key == "employee" and self.ref_boxes:
             self._fill_refs()
+        if key == "employee" and self.template_id in LEAVE_TEMPLATES:  # залишок днів, як у HRMIS
+            from ..leave import summary_html
+            base = self.info.text().split("<hr>")[0]
+            self.info.setText(base + "<hr>" + (summary_html(self.db, pid) or ""))
 
     def values(self) -> dict[str, str]:
         out = {k: e.text().strip() for k, e in self.edits.items()}
@@ -365,6 +372,8 @@ def create_from_template(db: Database, template_id: str, values: dict[str, str],
         ppl.link(oid, pid, key)
     for key, ref_id in (refs or {}).items():
         db.link_order(oid, key, ref_id)
+    from ..leave import record
+    record(db, oid, t.id, values, (persons or {}).get("employee"), refs)
     for a in t.attachments:
         body = ""
         if a.startswith("Список учнів") and values.get("cls") and ppl.find("pupil", cls=values["cls"]):

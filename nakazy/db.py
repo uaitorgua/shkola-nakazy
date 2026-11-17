@@ -12,7 +12,7 @@ import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 
 @dataclass(frozen=True)
@@ -103,6 +103,12 @@ CREATE TABLE IF NOT EXISTS order_links (
     field TEXT NOT NULL,                     -- поле шаблону (leave_order, order…)
     ref_id INTEGER NOT NULL REFERENCES orders(id),
     PRIMARY KEY (order_id, field));
+CREATE TABLE IF NOT EXISTS leave_days (
+    order_id INTEGER PRIMARY KEY REFERENCES orders(id) ON DELETE CASCADE,
+    person_id INTEGER NOT NULL REFERENCES people(id),
+    work_year TEXT NOT NULL DEFAULT '',      -- робочий рік «дд.мм.рррр–дд.мм.рррр» або як введено
+    op TEXT NOT NULL,                        -- used | comp | back
+    days INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS blanks (
     id INTEGER PRIMARY KEY, name TEXT NOT NULL, mode TEXT NOT NULL,  -- 'text' | 'image' | 'docx'
     data BLOB, fields_json TEXT NOT NULL DEFAULT '{}', is_default INTEGER NOT NULL DEFAULT 0);
@@ -162,6 +168,8 @@ class Database:
         for col in ("type_name", "template_id", "source"):  # v1 -> v2 -> v4
             if col not in cols:
                 self.con.execute(f"ALTER TABLE orders ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
+        if "leave_right" not in {r[1] for r in self.con.execute("PRAGMA table_info(people)")}:  # v6
+            self.con.execute("ALTER TABLE people ADD COLUMN leave_right INTEGER")
         self.con.execute("INSERT OR REPLACE INTO meta VALUES ('schema_version', ?)", (str(SCHEMA_VERSION),))
 
     def _backup_before_migration(self):
@@ -343,6 +351,7 @@ class Database:
             self.con.execute("DELETE FROM attachments WHERE order_id = ?", (order_id,))
             self.con.execute("DELETE FROM order_persons WHERE order_id = ?", (order_id,))
             self.con.execute("DELETE FROM order_links WHERE order_id = ?", (order_id,))
+            self.con.execute("DELETE FROM leave_days WHERE order_id = ?", (order_id,))
             self.con.execute("DELETE FROM order_versions WHERE order_id = ?", (order_id,))
             self.con.execute("DELETE FROM orders WHERE id = ?", (order_id,))
 

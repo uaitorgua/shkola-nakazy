@@ -31,7 +31,8 @@ class PersonDialog(QDialog):
         f = QFormLayout(self)
         self.e = {}
         cols = PUPIL_COLS if kind == "pupil" else STAFF_COLS
-        for key, title in cols + ([("subjects", "Предмети")] if kind == "staff" else []) + [("note", "Примітка")]:
+        extra = [("subjects", "Предмети"), ("leave_right", "Щорічна відпустка, днів на рік")] if kind == "staff" else []
+        for key, title in cols + extra + [("note", "Примітка")]:
             w = QLineEdit(str(row[key] or "") if row else "")
             if key == "birth" and row and row["birth"]:
                 w.setText(format_date(row["birth"]))
@@ -64,6 +65,10 @@ class PersonDialog(QDialog):
             v["birth"] = b
         else:
             v["birth"] = None
+        if "leave_right" in v:
+            if v["leave_right"] and not v["leave_right"].isdigit():
+                QMessageBox.warning(self, "Картка", "Щорічна відпустка: кількість днів числом."); return
+            v["leave_right"] = int(v["leave_right"]) if v["leave_right"] else None
         if self.kind == "pupil" and v.get("cls"):
             v["cls"] = importer.norm_cls(v["cls"])
         v["sex"] = self.sex.currentData() or ""
@@ -242,9 +247,11 @@ class PeopleWindow(QMainWindow):
         orders = "".join(f"<li>{format_date(o['date'])} № {o['reg_index'] or 'чернетка'} – {html.escape(o['title'])}</li>"
                          for o in self.ppl.orders_of(r["id"]))
         extra = f"Клас: {r['cls']}" if r["kind"] == "pupil" else f"Посада: {html.escape(r['position'])}"
+        from ..leave import summary_html
+        leave = summary_html(self.ppl.db, r["id"]) if r["kind"] == "staff" else ""
         self.card.setHtml(f"<h3>{html.escape(f['nom'])}</h3><p>{extra}<br>Народження: {format_date(r['birth'])}"
                           f"<br>Статус: {'вибув' if r['status'] == 'left' else 'активний'}</p>"
-                          f"<table>{cases}</table><h4>Накази</h4><ul>{orders or '<li>немає</li>'}</ul>")
+                          f"<table>{cases}</table>{leave}<h4>Накази</h4><ul>{orders or '<li>немає</li>'}</ul>")
 
     def add(self):
         if PersonDialog(self, self.ppl, self.kind()).exec():

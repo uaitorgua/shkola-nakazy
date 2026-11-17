@@ -12,7 +12,7 @@ from .db import Database, _now
 from .names import all_cases, guess_sex, initials
 
 PERSON_FIELDS = ("kind", "last", "first", "middle", "birth", "sex", "status", "cls", "case_no", "enrolled",
-                 "position", "rate", "subjects", "category", "employment", "ext_id", "note")
+                 "position", "rate", "subjects", "category", "employment", "ext_id", "note", "leave_right")
 KIND_TITLES = {"pupil": "Учні", "staff": "Працівники"}
 
 

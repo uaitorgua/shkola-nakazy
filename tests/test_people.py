@@ -217,6 +217,39 @@ class Gui(unittest.TestCase):
         self.assertEqual(db.links_to(leave_a), [])
         db.close()
 
+    def test_leave_balance(self):
+        """Залишок днів щорічної відпустки: право − використано − компенсовано + повернуто."""
+        from nakazy.leave import summary, summary_html, work_year_key
+        from nakazy.ui.order_editor import create_from_template
+        self.assertEqual(work_year_key("з 1.9.2025 по 31.08.2026"), "01.09.2025–31.08.2026")
+        d = tempfile.mkdtemp(); db = Database(os.path.join(d, "v.db")); ppl = People(db)
+        db.set_setting("head", "Олена ПЕТРЕНКО")
+        a = ppl.add(kind="staff", last="Коваль", first="Марія", middle="Іванівна", leave_right=56)
+        per = {"employee": a}
+        y = "з 01.09.2025 по 31.08.2026"
+        l1 = create_from_template(db, "v_annual", {"days": "28", "period": y}, persons=per)
+        db.register(l1, "2026-07-01")
+        l2 = create_from_template(db, "v_annual", {"days": "14", "period": y}, persons=per)  # чернетка
+        self.assertEqual(summary(db, a)[0]["left"], 28)  # чернетка не рахується
+        db.register(l2, "2026-07-30")
+        rc = create_from_template(db, "v_recall", {"days": "5"}, persons=per, refs={"leave_order": l2})
+        db.register(rc, "2026-08-02")
+        cp = create_from_template(db, "v_compensation", {"days": "10", "period": y}, persons=per)
+        db.register(cp, "2026-08-10")
+        s = summary(db, a)[0]
+        self.assertEqual((s["year"], s["used"], s["back"], s["comp"], s["left"], s["warn"]),
+                         ("01.09.2025–31.08.2026", 42, 5, 10, 9, False))
+        db.cancel(cp, "помилка")  # скасований наказ не рахується
+        self.assertEqual(summary(db, a)[0]["left"], 19)
+        b = ppl.add(kind="staff", last="Білий", first="Микола", middle="Іванович", leave_right=24)
+        c2 = create_from_template(db, "v_compensation", {"days": "3", "period": y}, persons={"employee": b})
+        db.register(c2, "2026-08-11")
+        self.assertTrue(summary(db, b)[0]["warn"])
+        self.assertIn("менше 24 днів", summary_html(db, b))
+        n = ppl.add(kind="staff", last="Ткач", first="Наталія")
+        self.assertIn("право не вказано", summary_html(db, n))
+        db.close()
+
 from qt_cleanup import tearDownModule  # noqa: E402,F401
 
 if __name__ == "__main__":
