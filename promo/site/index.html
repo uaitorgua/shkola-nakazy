@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="uk" data-version="0.1.4">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Накази ШКОЛА: інструкція – ГС «УАІТ»</title>
+<meta name="description" content="Накази ШКОЛА: інструкція. Реєстр наказів закладу освіти, шаблони, бланк, журнали, відпустки.">
+<meta property="og:title" content="Накази ШКОЛА: інструкція – ГС «УАІТ»">
+<meta property="og:description" content="Накази ШКОЛА: інструкція. Реєстр наказів закладу освіти, шаблони, бланк, журнали, відпустки.">
+<meta property="og:url" content="https://uait.org.ua/nakazy/">
+<meta property="og:image" content="https://uait.org.ua/assets/uait.png">
+<link rel="icon" type="image/png" href="/assets/uait.png">
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{--b:#00d2ff;--p:#9d50bb}
+body{color:#fff;font-family:'Inter',sans-serif;margin:0;overflow-x:hidden;
+ background:radial-gradient(1100px 700px at 85% -10%,rgba(40,90,190,.45) 0%,transparent 60%),
+ radial-gradient(900px 650px at -10% 45%,rgba(120,70,190,.30) 0%,transparent 60%),
+ radial-gradient(900px 600px at 60% 110%,rgba(0,170,220,.22) 0%,transparent 60%),
+ linear-gradient(180deg,#0f1830 0%,#13203c 50%,#101a33 100%);background-attachment:fixed}
+.bg-grid{background-size:40px 40px;background-image:linear-gradient(to right,rgba(255,255,255,.06) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,.06) 1px,transparent 1px)}
+.parallax-bg{position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden}
+.nebula{position:absolute;border-radius:50%;opacity:.30;transform:scale(1.5)}
+.floating-icon{position:absolute;opacity:.2;pointer-events:none;animation:drift var(--d,60s) ease-in-out infinite alternate}
+@keyframes drift{from{transform:translate(0,0) rotate(0deg) scale(var(--s,1))}to{transform:translate(var(--dx,80px),var(--dy,60px)) rotate(var(--r,90deg)) scale(var(--s,1))}}
+.bg-layer{position:absolute;inset:-60px;will-change:transform}.bg-layer.bg-grid{bottom:-100px}
+.icon-layer{position:absolute;left:0;right:0;top:0;height:200%;will-change:transform}
+#icons-container{position:absolute;inset:0}
+@media(prefers-reduced-motion:reduce){.rv{opacity:1!important;transform:none!important}}
+.text-glow{text-shadow:0 0 10px rgba(0,210,255,.5),0 0 20px rgba(0,210,255,.3)}
+.rv{opacity:0;transform:translateY(30px);transition:opacity .8s ease,transform .8s cubic-bezier(.2,.7,.2,1)}.rv.in{opacity:1;transform:none}
+.section-glow{position:absolute;width:800px;height:800px;background:radial-gradient(circle,rgba(0,210,255,.08) 0%,transparent 70%);pointer-events:none;z-index:-1}
+a{color:inherit}
+.site-nav{position:fixed;top:0;left:0;right:0;z-index:40;display:flex;align-items:center;justify-content:space-between;
+ gap:16px;padding:12px 24px;background:rgba(5,5,5,.72);backdrop-filter:blur(16px);border-bottom:1px solid rgba(255,255,255,.08)}
+.site-nav .links{display:flex;gap:18px;font-size:.875rem;white-space:nowrap}
+.site-nav .links a{color:rgba(255,255,255,.75);text-decoration:none}.site-nav .links a:hover{color:var(--b)}
+@media(max-width:640px){.site-nav .links a.opt{display:none}}
+.subnav{display:flex;flex-wrap:wrap;gap:8px}
+.subnav a{font-family:'JetBrains Mono',monospace;font-size:12px;padding:6px 14px;border-radius:999px;text-decoration:none;
+ border:1px solid rgba(255,255,255,.14);color:rgba(255,255,255,.7);background:rgba(255,255,255,.04)}
+.subnav a:hover{border-color:var(--b);color:#fff}
+.subnav a.on{background:var(--b);color:#000;border-color:var(--b);font-weight:700}
+.mono-chip{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.2em;text-transform:uppercase;padding:.25rem .75rem;border-radius:999px;display:inline-block}
+.card{background:rgba(255,255,255,.065);backdrop-filter:blur(24px);border:1px solid rgba(255,255,255,.12);border-radius:1.5rem;padding:2rem;
+ transition:all .4s cubic-bezier(.4,0,.2,1);box-shadow:0 20px 40px rgba(0,0,0,.4)}
+a.card:hover{background:rgba(255,255,255,.10);transform:translateY(-6px);border-color:var(--b)}
+.tag{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.15em;text-transform:uppercase;padding:3px 10px;border-radius:999px;border:1px solid}
+.tag-pc{color:#00d2ff;border-color:rgba(0,210,255,.35);background:rgba(0,210,255,.10)}
+.tag-web{color:#4ade80;border-color:rgba(74,222,128,.35);background:rgba(74,222,128,.10)}
+.tag-mob{color:#c084fc;border-color:rgba(192,132,252,.35);background:rgba(192,132,252,.10)}
+.tag-dev{color:rgba(255,255,255,.6);border-color:rgba(255,255,255,.2);background:rgba(255,255,255,.05)}
+.btn-primary{display:inline-block;background:var(--b);color:#000;font-weight:700;padding:.75rem 1.5rem;border-radius:.75rem;text-decoration:none}
+.btn-primary:hover{background:#fff}
+.soon{display:inline-flex;align-items:center;gap:14px;padding:14px 22px;border-radius:18px;
+ background:linear-gradient(135deg,rgba(0,164,239,.16),rgba(127,186,0,.12));border:1px solid rgba(0,164,239,.45)}
+.soon b{display:block;font-size:1.05rem}.soon small{color:rgba(255,255,255,.65)}
+.shot{border-radius:14px;border:1px solid rgba(255,255,255,.12);box-shadow:0 20px 50px rgba(0,0,0,.5);width:100%;height:auto;display:block;cursor:zoom-in}
+.feat h3{font-weight:700;margin:0 0 .5rem}.feat p{color:rgba(255,255,255,.62);font-size:.9rem;line-height:1.6;margin:0}
+#lb{position:fixed;inset:0;background:rgba(0,0,0,.9);display:none;align-items:center;justify-content:center;z-index:60;padding:16px;cursor:zoom-out}
+#lb img{max-width:100%;max-height:100%;border-radius:10px}
+</style>
+</head>
+<body>
+<div class="parallax-bg">
+        <div class="bg-layer bg-grid" data-k="0.02" data-m="3" data-wrap="40"></div>
+        <div class="bg-layer" data-k="0.04" data-m="6">
+        <div class="nebula" style="background: radial-gradient(closest-side, rgba(0,210,255,1) 0%, rgba(0,210,255,.7) 35%, rgba(0,210,255,0) 100%); width: 600px; height: 600px; top: -100px; left: -100px;"></div>
+        <div class="nebula" style="background: radial-gradient(closest-side, rgba(157,80,187,1) 0%, rgba(157,80,187,.7) 35%, rgba(157,80,187,0) 100%); width: 800px; height: 800px; bottom: -200px; right: -200px;"></div>
+        <div class="nebula" style="background: radial-gradient(closest-side, rgba(59,130,246,1) 0%, rgba(59,130,246,.7) 35%, rgba(59,130,246,0) 100%); width: 520px; height: 520px; top: 55%; left: 35%;"></div>
+        </div>
+        <div class="section-glow" style="top: 30%; left: 5%;"></div>
+        <div class="section-glow" style="top: 70%; right: 5%; background: radial-gradient(circle, rgba(157, 80, 187, 0.05) 0%, transparent 70%);"></div>
+
+        <!-- Floating Icons Container -->
+        <div id="icons-container"></div>
+    </div>
+
+    
+<nav class="site-nav">
+  <a href="/" class="flex items-center gap-3 font-extrabold tracking-tight text-white no-underline">
+    <img src="/assets/uait-80.png" width="32" height="32" alt="UAIT" class="w-8 h-8 object-contain" style="filter:drop-shadow(0 0 10px rgba(0,210,255,.45))">
+    <span>UAIT<span class="text-[#00d2ff]">.ORG.UA</span></span>
+  </a>
+  <div class="links">
+    <a href="/" class="opt">Головна</a>
+    <a href="/#software" style="color:#00d2ff">Програми</a>
+    <a href="/#projects" class="opt">Проєкти</a>
+    <a href="/#contacts">Контакти</a>
+  </div>
+</nav>
+<style>.ins p,.ins li{color:rgba(255,255,255,.72);line-height:1.7;font-size:.95rem}.ins p{margin:0 0 .8rem}.ins ul,.ins ol{margin:0 0 .9rem 1.2rem}.ins ul{list-style:disc}.ins ol{list-style:decimal}.ins li{margin:.25rem 0}.ins b{color:#fff}.ins a{color:#00d2ff}.ins h3{font-weight:700;margin:1rem 0 .4rem}.ins .shot{margin-top:1rem}.muted{color:rgba(255,255,255,.45);font-weight:400}.toc{list-style:decimal;margin-left:1.2rem;columns:2;color:rgba(255,255,255,.7)}.toc a{color:#00d2ff;text-decoration:none}@media(max-width:640px){.toc{columns:1}}.ver{font-family:'JetBrains Mono',monospace;font-size:12px;padding:6px 14px;border-radius:999px;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.4);color:#fbbf24}section{scroll-margin-top:80px}</style><main class="max-w-6xl mx-auto px-4 md:px-8 pt-28 pb-20"><div class="text-xs font-mono text-white/40 mb-3"><a href="/" class="hover:text-white">uait.org.ua</a> / <a href="/pz/shkola/" class="hover:text-white">ШКОЛА</a> / Накази</div>
+<span class="tag tag-pc">Windows 10 / 11</span>
+<h1 class="text-4xl md:text-6xl font-extrabold tracking-tighter mt-5 mb-5 text-glow">Накази <span class="text-[#fbbf24]">ШКОЛА</span></h1>
+<p class="text-white/70 text-lg max-w-3xl mb-4 leading-relaxed">Книга наказів закладу освіти: реєстр з окремою нумерацією за видами, понад 50 шаблонів, бланк закладу, журнали реєстрації, номенклатура справ, довідник учнів і працівників, відпустки. Дані зберігаються лише на комп'ютері закладу.</p>
+<p class="mb-8"><span class="ver">Інструкція до версії 0.1.4 · оновлено 17.11.2026</span></p>
+<div class="flex flex-wrap gap-3 mb-12"><a class="btn-primary" href="https://apps.microsoft.com/detail/9PJNZB9R4HGK" target="_blank" rel="noopener">Microsoft Store</a><a class="card no-underline !py-3 !px-6 !rounded-xl font-bold" href="mailto:admin@uait.org.ua?subject=%D0%9D%D0%B0%D0%BA%D0%B0%D0%B7%D0%B8%20%D0%A8%D0%9A%D0%9E%D0%9B%D0%90">Написати нам</a></div>
+<img class="shot mb-4" src="img/01_reiestr.png?v=0.1.4" alt="Головне вікно: реєстр наказів" loading="lazy">
+<nav class="card mb-6 mt-10"><h2 class="text-xl font-bold mb-3">Зміст</h2><ol class="toc"><li><a href="#start">Встановлення й оновлення</a></li><li><a href="#zaklad">Заклад і бланк</a></li><li><a href="#liudy">Люди</a></li><li><a href="#novyi">Новий наказ за шаблоном</a></li><li><a href="#hrupa">Групові накази</a></li><li><a href="#zviazok">Зв'язок наказів</a></li><li><a href="#redaktor">Редагування, реєстрація, друк</a></li><li><a href="#vidpustky">Відпустки й графік</a></li><li><a href="#zhurnal">Журнали, справи, перевірка</a></li><li><a href="#import">Старі накази</a></li><li><a href="#kopii">Дані й резервні копії</a></li><li><a href="#versii">Що нового</a></li></ol></nav>
+<section id="start" class="card mb-6"><h2 class="text-2xl font-bold mb-4">Встановлення й оновлення</h2><div class="ins">
+<p>Програму встановлюють з <a href="https://apps.microsoft.com/detail/9PJNZB9R4HGK" target="_blank" rel="noopener">Microsoft Store</a> на Windows 10 або 11.
+Інтернет потрібен лише для встановлення й оновлень: накази, довідник і бланк зберігаються на цьому комп'ютері.</p>
+<p>Оновлення приходять через Microsoft Store. Коли виходить нова версія, програма повідомляє «Потрібне оновлення»
+і відкриває сторінку в Store. Без інтернету програма працює як звичайно. Перед кожною зміною будови бази
+програма сама робить її копію, тож внесені дані після оновлення зберігаються.</p>
+<p>Головне вікно: ліворуч рік і види наказів з лічильниками, посередині список наказів і кнопки, праворуч перегляд
+вибраного наказу. Види: з основної діяльності, з руху учнів (-у), з кадрових питань (-к), про відпустки (-в),
+адміністративно-господарські (-г). Номери в кожному виді свої й щороку починаються з 1.</p></div></section>
+<section id="zaklad" class="card mb-6"><h2 class="text-2xl font-bold mb-4">Заклад і бланк</h2><div class="ins">
+<p>Кнопка <b>«Заклад…»</b>. Спершу заповніть: повну назву закладу, населений пункт, керівника у форматі
+«Власне ім'я ПРІЗВИЩЕ» (ДСТУ 4163:2020), посаду керівника, кегль тексту, відступ грифа додатка.
+Галочка «З наказом ознайомлені» додає до наказу місце для підписів працівників.</p>
+<p>Бланк ставиться лише на першу сторінку наказу. Три способи:</p>
+<ul><li><b>Текстовий</b>: програма складає шапку з полів (орган управління, назва закладу, адреса, код ЄДРПОУ, e-mail).</li>
+<li><b>Зображення</b>: скан або PNG вашого бланка, ширину задаєте в міліметрах.</li>
+<li><b>Готовий бланк у Word (DOCX)</b>, наприклад з гербом. Якщо на бланку вже є слово «НАКАЗ», поставте галочку.</li></ul></div></section>
+<section id="liudy" class="card mb-6"><h2 class="text-2xl font-bold mb-4">Люди: учні й працівники</h2><div class="ins">
+<p>Кнопка <b>«Люди…»</b>. Тут довідник учнів і працівників: його можна вести вручну або завантажити з Excel чи CSV,
+зокрема з вивантаження АІКОМ (майстер імпорту сам розпізнає колонки і не створює дублів). Програма сама
+відмінює ПІБ (кого, кому, кого); якщо помилилась, виправте відмінок у картці.</p>
+<p>У картці працівника є поле <b>«Щорічна відпустка, днів на рік»</b>: з нього програма рахує залишок відпустки.
+Картка показує всі накази людини.</p>
+<img class="shot mb-4" src="img/06_kartka.png?v=0.1.4" alt="Картка працівника із залишком відпустки" loading="lazy"></div></section>
+<section id="novyi" class="card mb-6"><h2 class="text-2xl font-bold mb-4">Новий наказ за шаблоном</h2><div class="ins">
+<ol><li>Натисніть <b>«Новий наказ»</b>. Ліворуч дерево: вид → тип → шаблон. Угорі пошук за частиною слова
+(«відпустк», «зарахув», «харч»).</li>
+<li>Праворуч поля шаблону й нормативна підстава. Людину виберіть з довідника: ПІБ у потрібних відмінках, клас
+чи посада підставляться самі. Можна ввести й вручну.</li>
+<li>Натисніть <b>«Створити»</b>: відкриється чернетка наказу в редакторі.</li></ol>
+<p>Шаблони мають структуру за Інструкцією МОН № 676: заголовок «Про…», підстава, «НАКАЗУЮ:», пункти.
+Нормативні підстави подано як орієнтир; позначені «не підтверджено» заклад звіряє з чинною редакцією акта.</p>
+<img class="shot mb-4" src="img/02_shablon.png?v=0.1.4" alt="Майстер шаблону: перенесення відпустки з наказом-підставою" loading="lazy"></div></section>
+<section id="hrupa" class="card mb-6"><h2 class="text-2xl font-bold mb-4">Групові накази</h2><div class="ins">
+<p>Для щорічних відпусток, днів відпочинку, відряджень, роботи у вихідний, заохочень, надбавок за вислугу,
+допомоги на оздоровлення й підвищення кваліфікації можна оформити один наказ на кількох працівників.</p>
+<ol><li>У майстрі шаблону поставте галочку <b>«Кілька працівників (груповий наказ)»</b>.</li>
+<li>Натисніть <b>«Додати з довідника…»</b> і виділіть потрібних людей (або «+ рядок» для введення вручну).</li>
+<li>У таблиці заповніть дані кожного (дні, дати, захід заохочення…), нижче спільні поля.</li></ol>
+<p>Кожен працівник стає окремим пунктом наказу, спільні пункти («Бухгалтерії…») йдуть один раз.</p>
+<img class="shot mb-4" src="img/03_hrupovyi.png?v=0.1.4" alt="Груповий наказ про заохочення" loading="lazy"></div></section>
+<section id="zviazok" class="card mb-6"><h2 class="text-2xl font-bold mb-4">Зв'язок наказів</h2><div class="ins">
+<p>Деякі накази спираються на попередній: поновлення на звільнення, відкликання й перенесення відпустки на наказ
+про відпустку, день відпочинку на роботу у вихідний, зміни до відрядження на відрядження, зняття догани на догану,
+повернення зі служби на увільнення у зв'язку з призовом. У майстрі такого шаблону є поле <b>«Наказ-підстава»</b>:
+вибраний наказ підставляє в текст «від дата № номер». Першими в списку стоять накази вибраної людини.</p>
+<p>Зв'язок видно в перегляді обох наказів: «Підстава» і «Пов'язаний наказ».</p></div></section>
+<section id="redaktor" class="card mb-6"><h2 class="text-2xl font-bold mb-4">Редагування, реєстрація, друк</h2><div class="ins">
+<p>Наказ відкривається у вбудованому редакторі: текст, таблиці, додатки (текстом або файлом). Праворуч реквізити:
+дата, заголовок, підписант, контроль, примітки. Програма підказує, якщо структура наказу не відповідає вимогам.</p>
+<ul><li><b>«Зареєструвати»</b> дає наступний номер у виді (наприклад 12-к). Після реєстрації наказ змінити не
+можна: лише кнопкою <b>«Наказ про зміни»</b> (окремий наказ «Про внесення змін…») або <b>«Скасувати»</b>
+(номер не звільняється).</li>
+<li><b>«Зберегти DOCX/PDF…»</b> зберігає наказ з бланком, підписом і додатками для друку.</li>
+<li>Чернетку можна видалити; у неї зберігається історія правок.</li></ul>
+<img class="shot mb-4" src="img/04_redaktor.png?v=0.1.4" alt="Редактор наказу з панеллю реквізитів" loading="lazy"></div></section>
+<section id="vidpustky" class="card mb-6"><h2 class="text-2xl font-bold mb-4">Відпустки й графік відпусток</h2><div class="ins">
+<p><b>Залишок днів.</b> Програма рахує щорічну відпустку кожного працівника за робочими роками: право з картки
+мінус використані дні (накази про щорічну відпустку), мінус компенсовані, плюс повернуті при відкликанні.
+Рахуються лише зареєстровані накази, створені майстром з працівником з довідника. Залишок видно в картці
+працівника і в майстрі, щойно вибрано працівника. Якщо після компенсації лишається менше 24 днів, програма
+попереджає (ст. 24 Закону України «Про відпустки»).</p>
+<p><b>Графік відпусток</b> (кнопка «Графік відпусток…»):</p>
+<ol><li>Виберіть рік і додайте працівників з довідника.</li>
+<li>Заповніть вид, кількість днів, дати й робочий рік. Програма попередить, якщо дати переплутані або
+заплановано більше, ніж право.</li>
+<li><b>«Наказ про затвердження графіка»</b> створює чернетку наказу з таблицею в додатку і грифом «ЗАТВЕРДЖЕНО»
+(графік погоджують з профспілковим органом: ст. 10 Закону «Про відпустки», ст. 79 КЗпП).</li>
+<li>Перед відпусткою виділіть рядки й натисніть <b>«Накази про відпустку (окремі)»</b> або <b>«Груповий наказ
+про відпустки»</b>. Рядок пам'ятає свій наказ і вдруге його не створює.</li></ol>
+<img class="shot mb-4" src="img/05_hrafik.png?v=0.1.4" alt="Графік відпусток" loading="lazy"></div></section>
+<section id="zhurnal" class="card mb-6"><h2 class="text-2xl font-bold mb-4">Журнали, справи, перевірка</h2><div class="ins">
+<ul><li><b>«Журнал…»</b> – журнал реєстрації наказів вибраного виду за рік у DOCX (шапка на кожній сторінці).</li>
+<li><b>«Справи…»</b> – номенклатура справ на рік зі строками зберігання за Переліком 578/5; кнопка формує справу
+одним PDF (перелік і накази з додатками за датами).</li>
+<li><b>«Перевірка»</b> – перевірка реєстру: пропущені й повторені номери, порядок дат, накази без підписанта,
+незаповнені строки зберігання.</li>
+<li>Поле <b>«Пошук у наказах…»</b> шукає за текстом і номерами всіх наказів.</li></ul></div></section>
+<section id="import" class="card mb-6"><h2 class="text-2xl font-bold mb-4">Старі накази</h2><div class="ins">
+<p><b>«Імпорт наказів…»</b> переносить архів у реєстр: файли Word (DOCX, DOC, RTF, ODT), PDF і скани (текст
+розпізнається на комп'ютері, без інтернету). Програма знаходить номер, дату, заголовок і підпис; сумнівне
+позначає жовтим, ви виправляєте в таблиці перед записом. Оригінал файла зберігається з наказом.</p></div></section>
+<section id="kopii" class="card mb-6"><h2 class="text-2xl font-bold mb-4">Дані й резервні копії</h2><div class="ins">
+<p>База наказів зберігається лише на цьому комп'ютері, у теці даних користувача Windows, окремо від програми.
+Резервні копії програма робить сама: при кожному запуску (зберігаються 30 останніх) і перед кожною зміною
+будови бази під час оновлення (ці не видаляються).</p>
+<p>Якщо потрібно відновити дані з копії або перенести реєстр на інший комп'ютер, напишіть нам: допоможемо.</p></div></section>
+<section id="versii" class="card mb-6"><h2 class="text-2xl font-bold mb-4">Що нового</h2><div class="ins"><h3>Версія 0.1.4 <span class="muted">· 17.11.2026</span></h3><ul><li>22 нові кадрові шаблони: припинення виконання обов&#x27;язків, поновлення, робота у вихідний день, вихід з відпустки для догляду за дитиною, заохочення, премія, допомога на оздоровлення, надбавка за вислугу років, оплата заміни уроків, підвищення кваліфікації, призов і повернення зі служби, зміна облікових даних; графік відпусток, перенесення й компенсація відпустки, дні відпочинку, відрядження, догана.</li><li>Зв&#x27;язок наказів: наказ-підстава вибирається з реєстру, дата й номер підставляються самі.</li><li>Залишок днів щорічної відпустки в картці працівника й у майстрі шаблону.</li><li>Групові накази: кілька працівників в одному наказі.</li><li>Графік відпусток таблицею: наказ про затвердження й накази про відпустку з таблиці.</li></ul><h3>Версія 0.1.3 <span class="muted">· 12.11.2026</span></h3><ul><li>Пошук у шаблонах за частиною слова. Перша версія в Microsoft Store.</li></ul></div></section>
+<div class="card mb-6"><h2 class="text-xl font-bold mb-3">Контакти</h2><p class="text-white/65 leading-relaxed m-0">Питання, пропозиції, допомога: <a class="text-[#00d2ff]" href="mailto:admin@uait.org.ua?subject=%D0%9D%D0%B0%D0%BA%D0%B0%D0%B7%D0%B8%20%D0%A8%D0%9A%D0%9E%D0%9B%D0%90">admin@uait.org.ua</a> · <a class="text-[#00d2ff]" href="tel:+380687686454">+380 68 768 64 54</a>. Розробляємо разом із Дрогобицьким науковим ліцеєм імені Богдана Лепкого.</p></div></main>
+<footer class="border-t border-white/10 py-10 px-4 text-center text-sm text-white/45">
+  Видавець програм – ГС «Українська асоціація інноваційних технологій» · <a href="mailto:admin@uait.org.ua" class="hover:text-[#00d2ff]">admin@uait.org.ua</a> · <a href="/privacy/" class="hover:text-[#00d2ff]">Політика конфіденційності</a>
+</footer>
+<div id="lb" onclick="this.style.display='none'"><img alt=""></div>
+<script>
+// Floating Icons & Particles Logic
+        const icons = [
+            // Atom
+            '<svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>',
+            // Cpu
+            '<svg width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9z"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/></svg>',
+            // Microscope
+            '<svg width="55" height="55" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 18h8"/><path d="M3 22h18"/><path d="M14 22a7 7 0 1 0 0-14h-1"/><path d="M9 14h2"/><path d="M9 12a2 2 0 1 1-4 0V7a2 2 0 1 1 4 0v5Z"/><path d="M12 7v3"/></svg>',
+            // Rocket
+            '<svg width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09Z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2Z"/><path d="M9 12H4s.55-3.03 2-5c1.62-2.2 5-3 5-3"/><path d="M12 15v5s3.03-.55 5-2c2.2-1.62 3-5 3-5"/></svg>',
+            // Flask
+            '<svg width="45" height="45" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2v7.527a2 2 0 0 1-.211.896L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.069-10.127A2 2 0 0 1 14 9.527V2"/><path d="M8.5 2h7"/><path d="M7 16h10"/></svg>'
+        ];
+
+        const container = document.getElementById('icons-container');
+        const floatingElements = [];
+        const particleCount = 8; // 8 значків, рух — CSS-анімацією (без JS-циклу)
+
+        const shapes = [
+            // Triangle
+            '<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M12 3L2 21H22L12 3Z"/></svg>',
+            // Square
+            '<svg width="35" height="35" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>',
+            // Hexagon
+            '<svg width="45" height="45" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M12 2L21 7V17L12 22L3 17V7L12 2Z"/></svg>',
+            // Diamond
+            '<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M12 2L22 12L12 22L2 12L12 2Z"/></svg>'
+        ];
+
+        // Глибина: 3 шари значків (далекий / середній / ближній), рух лише CSS-анімацією.
+        // Кожен шар має висоту 2 екрани: значки у верхній половині й їхні копії в нижній,
+        // тож паралакс прокрутки зациклюється без стрибків.
+        const LAYERS = [
+            { k: 0.10, m: 14, n: 6, op: 0.28, s: [0.35, 0.55], d: [35, 50], amp: [40, 80] },
+            { k: 0.20, m: 28, n: 5, op: 0.45, s: [0.6, 0.85], d: [20, 30], amp: [60, 100] },
+            { k: 0.35, m: 48, n: 3, op: 0.7,  s: [0.95, 1.25], d: [12, 18], amp: [80, 120] }
+        ];
+        const rnd = (a, b) => a + Math.random() * (b - a);
+        const sgn = () => (Math.random() < 0.5 ? -1 : 1);
+        let iconNo = 0;
+        LAYERS.forEach((L) => {
+            const layer = document.createElement('div');
+            layer.className = 'icon-layer';
+            layer.dataset.k = L.k;
+            layer.dataset.m = L.m;
+            layer.dataset.wrap = 'vh';
+            for (let i = 0; i < L.n; i++, iconNo++) {
+                const el = document.createElement('div');
+                el.className = 'floating-icon';
+                const t = iconNo % 3;
+                el.innerHTML = t === 0 ? icons[iconNo % icons.length]
+                    : t === 1 ? shapes[iconNo % shapes.length]
+                    : `<div style="width:${(6 + Math.random() * 10).toFixed(0)}px;height:${(6 + Math.random() * 10).toFixed(0)}px;background:currentColor;border-radius:50%"></div>`;
+                el.style.left = rnd(4, 90).toFixed(1) + '%';
+                el.style.top = rnd(2, 46).toFixed(1) + '%';
+                el.style.color = iconNo % 2 === 0 ? '#00d2ff' : '#9d50bb';
+                el.style.opacity = L.op;
+                el.style.setProperty('--s', rnd(L.s[0], L.s[1]).toFixed(2));
+                el.style.setProperty('--d', rnd(L.d[0], L.d[1]).toFixed(0) + 's');
+                el.style.setProperty('--dx', (sgn() * rnd(L.amp[0], L.amp[1])).toFixed(0) + 'px');
+                el.style.setProperty('--dy', (sgn() * rnd(L.amp[0], L.amp[1]) * 0.7).toFixed(0) + 'px');
+                el.style.setProperty('--r', (sgn() * rnd(20, 90)).toFixed(0) + 'deg');
+                el.style.animationDelay = (-rnd(0, L.d[1])).toFixed(0) + 's';
+                const twin = el.cloneNode(true);
+                twin.style.top = (parseFloat(el.style.top) + 50) + '%';
+                layer.append(el, twin);
+            }
+            container.appendChild(layer);
+        });
+
+        // Глибина: прокрутка (k) і миша (m, лише ПК) зсувають 5 КОНТЕЙНЕРІВ шарів, не кожен значок.
+        // rAF працює лише поки шари доїжджають до цілі (лерп 0.08), потім зупиняється.
+        (() => {
+            const layers = [...document.querySelectorAll('[data-k]')];
+            const still = { matches: false }; // рух фону завжди (у Windows з вимкненою анімацією значки стояли)
+            const wide = matchMedia('(min-width: 768px)');
+            const fine = matchMedia('(pointer: fine)');
+            let tx = 0, ty = 0, cx = 0, cy = 0, queued = false;
+            let W = window.innerWidth, H = window.innerHeight, Y = window.scrollY;
+            function apply() {
+                queued = false;
+                const on = wide.matches && !still.matches;
+                const y = on ? Y : 0, h = H;
+                if (!on || !fine.matches) { tx = 0; ty = 0; }
+                cx += (tx - cx) * 0.08; cy += (ty - cy) * 0.08;
+                if (Math.abs(tx - cx) < 0.002 && Math.abs(ty - cy) < 0.002) { cx = tx; cy = ty; }
+                for (const l of layers) {
+                    let t = y * parseFloat(l.dataset.k);
+                    if (l.dataset.wrap === 'vh') t %= h;
+                    else if (l.dataset.wrap) t %= parseFloat(l.dataset.wrap);
+                    const m = parseFloat(l.dataset.m || 0);
+                    l.style.transform = `translate3d(${(cx * m).toFixed(1)}px, ${(cy * m - t).toFixed(1)}px, 0)`;
+                }
+                if (cx !== tx || cy !== ty) queue();
+            }
+            const queue = () => { if (!queued) { queued = true; requestAnimationFrame(apply); } };
+            window.addEventListener('scroll', () => { Y = window.scrollY; queue(); }, { passive: true });
+            window.addEventListener('resize', () => { W = window.innerWidth; H = window.innerHeight; Y = window.scrollY; queue(); }, { passive: true });
+            window.addEventListener('mousemove', (e) => {
+                if (!fine.matches || still.matches) return;
+                tx = e.clientX / W - 0.5;
+                ty = e.clientY / H - 0.5;
+                tx *= 2; ty *= 2;
+                queue();
+            }, { passive: true });
+            [wide, fine].forEach(q => q.addEventListener?.('change', queue));
+            apply();
+        })();
+
+        
+(function(){var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target);}});},{threshold:.12});
+document.querySelectorAll('main h1, main h2, main .card, main figure, main .soon').forEach(function(el,i){el.classList.add('rv');el.style.transitionDelay=(i%3*0.08)+'s';io.observe(el);});})();
+document.querySelectorAll('img.shot').forEach(function(i){i.addEventListener('click',function(){var lb=document.getElementById('lb');lb.querySelector('img').src=i.src;lb.querySelector('img').alt=i.alt;lb.style.display='flex';});});
+document.addEventListener('keydown',function(e){if(e.key==='Escape')document.getElementById('lb').style.display='none';});
+</script>
+</body>
+</html>

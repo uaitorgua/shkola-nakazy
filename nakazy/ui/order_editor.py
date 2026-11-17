@@ -186,6 +186,7 @@ class TemplatePicker(QDialog):
             if c == 0:
                 it.setData(Qt.UserRole, (pid, vals))
             self.gtable.setItem(r, c, it)
+        self.gtable.resizeColumnsToContents()
 
     def _group_from_people(self):
         from ..people import People

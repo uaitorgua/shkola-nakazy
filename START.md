@@ -55,7 +55,10 @@ akazy-shkola\promo_cache.json` (якщо не старший за вшитий) 
 
 - 17.11.2026 **0.1.4 у Store**: EXE 06:55 (FileVersion 0.1.4, підпис ГС «УАІТ» Valid), MSIX Identity 0.1.4.0, запуск EXE OK. Перевірено оновлення даних: база 0.1.3 з даними → 0.1.4 (схема v4→v8) – усі рядки на місці, копія `backups/…before-migration-v4.db`; закріплено тестом `tests/test_upgrade.py` (зразок `tests/fixtures/nakazy_v4_0.1.3.db`, у test.bat і build.py). Пакет залито `aivc web upload` (172 с), Validated, Save, «Submit for certification». Поле «Що нового» в лістингу не заповнювали. Код на GitHub.
 
+- 17.11.2026 **Інструкція на сайті https://uait.org.ua/nakazy/** (ЗАЛИТО 17.11 за словом користувача): `tools/site.py` генерує `promo/site/index.html` (оболонка `_shell.html` з дизайну сторінки «Сканера») і 6 знімків `promo/site/img/` на демонстраційній базі (offscreen, шрифти Windows). Прив'язка до версії: номер з `nakazy/__init__.py`, «Що нового» з `VERSIONS` у tools/site.py; `tests/test_site.py` (у test.bat і build.py) падає, якщо сторінка не для поточної версії, немає запису VERSIONS або кнопка з інструкції зникла з головного вікна. На сервері в public_html/nakazy/ додано index.html + img/, version.json (старий, для 0.1.1) не чіпали. Картка на /pz/shkola/ веде на /nakazy/ («понад 50 шаблонів»), копія ~/backup/pz-shkola-index-20261117-nakazy.html. Після сабміту 0.1.4 у коді: ширина колонок групової таблиці підбирається (буде в 0.1.5; знімок уже з нею).
+
 ## Правила
+- Нова версія = оновлена інструкція: VERSIONS у tools/site.py → `python tools\site.py` → залити promo/site/index.html і img/ у public_html/nakazy/ (test_site інакше не пропустить збірку).
 - Оновлення не губить дані: зміни схеми лише додають, копія перед міграцією; перед поданням – test_upgrade на базі попередньої опублікованої версії (для наступних версій додати зразок бази 0.1.4).
 - Коміт і START.md після кожного кроку; тексти без довгих тире.
 - Важкі збірки на Mac через чергу. Сервер, «Вектор», листи не чіпати.
