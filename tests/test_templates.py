@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from nakazy.db import KIND_BY_CODE, Database, check_structure  # noqa: E402
 from nakazy.templates import TEMPLATES, render  # noqa: E402
+from nakazy.templates import search as search_ids  # noqa: E402
 
 
 class TemplatesTest(unittest.TestCase):
@@ -26,6 +27,27 @@ class TemplatesTest(unittest.TestCase):
             self.assertEqual([p for p in check_structure(row) if p.startswith("!")], [])
             for k, _ in t.fields:
                 self.assertTrue(re.search(r"\{" + k + r"(\.\w+)?\}", t.title + t.preamble + "".join(t.items)), f"{t.id}: {k}")
+
+    def test_hr_templates_hrmis(self):
+        """Кадрові шаблони за переліком HRMIS (17.11.2026): є, у правильному виді, з підставою."""
+        from nakazy.templates import TEMPLATE_BY_ID
+        expect = {"k": ["k_duties_stop", "k_reinstate", "k_weekend", "k_childcare_return", "k_reward", "k_bonus",
+                        "k_aid", "k_seniority", "k_substitution_pay", "k_training", "k_military",
+                        "k_military_return", "k_rename"],
+                  "v": ["v_schedule", "v_transfer", "v_compensation", "v_dayoff", "v_donor", "v_trip",
+                        "v_trip_change", "v_reprimand", "v_reprimand_remove"]}
+        for kind, ids in expect.items():
+            for tid in ids:
+                t = TEMPLATE_BY_ID[tid]
+                self.assertEqual(t.kind, kind, tid)
+                self.assertTrue(t.basis, tid)
+        t = TEMPLATE_BY_ID["v_reprimand"]
+        title, body = render(t, {"employee": "Петренко О. І.", "employee.dat": "Петренко Олені Іванівні",
+                                 "position": "вчителю", "violation": "запізнення 03.11.2026",
+                                 "explanation_date": "04.11.2026"})
+        self.assertEqual(title, "Про оголошення догани Петренко Олені Іванівні")
+        self.assertIn("статей 147, 148, 149", body)
+        self.assertIn("v_schedule", [x.id for x in search_ids("графік відпусток")])
 
     def test_search(self):
         from nakazy.templates import search
