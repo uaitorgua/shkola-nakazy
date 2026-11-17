@@ -12,7 +12,7 @@ import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 
 @dataclass(frozen=True)
@@ -116,6 +116,12 @@ CREATE TABLE IF NOT EXISTS leave_plan (       -- v8: графік відпуст
     vtype TEXT NOT NULL DEFAULT 'основну', days INTEGER, from_date TEXT, to_date TEXT,
     period TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '',
     order_id INTEGER REFERENCES orders(id));
+CREATE TABLE IF NOT EXISTS order_values (     -- v9: значення полів шаблону (для дій наказу з довідником)
+    order_id INTEGER PRIMARY KEY REFERENCES orders(id) ON DELETE CASCADE,
+    values_json TEXT NOT NULL DEFAULT '{}', group_json TEXT NOT NULL DEFAULT '[]');
+CREATE TABLE IF NOT EXISTS order_effects (    -- v9: що наказ змінив у довіднику (для скасування)
+    id INTEGER PRIMARY KEY, order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    person_id INTEGER NOT NULL REFERENCES people(id), field TEXT NOT NULL, old TEXT, new TEXT);
 CREATE TABLE IF NOT EXISTS blanks (
     id INTEGER PRIMARY KEY, name TEXT NOT NULL, mode TEXT NOT NULL,  -- 'text' | 'image' | 'docx'
     data BLOB, fields_json TEXT NOT NULL DEFAULT '{}', is_default INTEGER NOT NULL DEFAULT 0);
@@ -190,6 +196,13 @@ class Database:
             self.con.execute("PRAGMA foreign_keys = ON")
         if "leave_right" not in {r[1] for r in self.con.execute("PRAGMA table_info(people)")}:  # v6
             self.con.execute("ALTER TABLE people ADD COLUMN leave_right INTEGER")
+        if "attest_year" not in {r[1] for r in self.con.execute("PRAGMA table_info(people)")}:  # v9
+            self.con.execute("ALTER TABLE people ADD COLUMN attest_year INTEGER")
+        cols = {r[1] for r in self.con.execute("PRAGMA table_info(orders)")}
+        for col, ddl in (("due_date", "TEXT NOT NULL DEFAULT ''"), ("done", "INTEGER NOT NULL DEFAULT 0"),
+                         ("visas", "TEXT NOT NULL DEFAULT ''")):  # v9: строк виконання, виконано, візи
+            if col not in cols:
+                self.con.execute(f"ALTER TABLE orders ADD COLUMN {col} {ddl}")
         self.con.execute("INSERT OR REPLACE INTO meta VALUES ('schema_version', ?)", (str(SCHEMA_VERSION),))
 
     def _backup_before_migration(self):
@@ -372,6 +385,8 @@ class Database:
             self.con.execute("DELETE FROM order_persons WHERE order_id = ?", (order_id,))
             self.con.execute("DELETE FROM order_links WHERE order_id = ?", (order_id,))
             self.con.execute("DELETE FROM leave_days WHERE order_id = ?", (order_id,))
+            self.con.execute("DELETE FROM order_values WHERE order_id = ?", (order_id,))
+            self.con.execute("UPDATE leave_plan SET order_id = NULL WHERE order_id = ?", (order_id,))
             self.con.execute("DELETE FROM order_versions WHERE order_id = ?", (order_id,))
             self.con.execute("DELETE FROM orders WHERE id = ?", (order_id,))
 
@@ -459,6 +474,32 @@ class Database:
 
     def original(self, order_id: int):
         return self.con.execute("SELECT * FROM originals WHERE order_id = ?", (order_id,)).fetchone()
+
+    def set_done(self, order_id: int, done: bool):
+        """Позначка «виконано» – контроль виконання, не зміна наказу (дозволено й для зареєстрованого)."""
+        with self.tx():
+            self.con.execute("UPDATE orders SET done = ? WHERE id = ?", (int(done), order_id))
+            self._audit(order_id, "done", str(int(done)))
+
+    def set_control(self, order_id: int, due_date: str, visas: str | None = None):
+        """Строк виконання (і візи для чернетки) – службові позначки поза текстом наказу."""
+        with self.tx():
+            self.con.execute("UPDATE orders SET due_date = ? WHERE id = ?", (due_date or "", order_id))
+            if visas is not None and self._require(order_id)["status"] == "draft":
+                self.con.execute("UPDATE orders SET visas = ? WHERE id = ?", (visas, order_id))
+
+    def save_values(self, order_id: int, values: dict, group: list | None = None):
+        import json
+        with self.tx():
+            self.con.execute("INSERT OR REPLACE INTO order_values VALUES (?, ?, ?)",
+                             (order_id, json.dumps(values, ensure_ascii=False),
+                              json.dumps(group or [], ensure_ascii=False)))
+
+    def order_values(self, order_id: int) -> tuple[dict, list]:
+        import json
+        r = self.con.execute("SELECT values_json, group_json FROM order_values WHERE order_id = ?",
+                             (order_id,)).fetchone()
+        return (json.loads(r[0]), json.loads(r[1])) if r else ({}, [])
 
     def cancel(self, order_id: int, reason: str):
         """Позначка «скасовано» (номер лишається в журналі, пропусків немає)."""
@@ -558,7 +599,7 @@ class Database:
 
 
 _EDITABLE = {"type_name", "template_id", "date", "title", "body_html", "basis", "signer", "signer_acting", "controller",
-             "responsible", "notes", "amends_order_id"}
+             "responsible", "notes", "amends_order_id", "visas"}
 
 
 def _fts_query(q: str) -> str:

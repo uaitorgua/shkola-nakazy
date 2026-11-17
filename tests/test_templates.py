@@ -51,7 +51,7 @@ class TemplatesTest(unittest.TestCase):
 
     def test_search(self):
         from nakazy.templates import search
-        self.assertEqual([t.id for t in search("*харч*")], ["o_food"])
+        self.assertEqual([t.id for t in search("*харч*")], ["o_food", "o_food_free"])
         self.assertIn("v_annual", [t.id for t in search("ВІДПУСТК щоріч")])
         self.assertIn("u_enroll", [t.id for t in search("зарахув")])
         self.assertEqual(search("ксилофон"), [])

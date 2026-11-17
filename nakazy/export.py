@@ -39,6 +39,23 @@ GRIF_INDENT = 100  # мм від лівого поля (ДСТУ 4163:2020 п. 7
 SIGN_INDENT = 125  # розшифрування підпису (ДСТУ п. 7.7)
 
 
+def visas_list(text: str) -> list[tuple[str, str]]:
+    """«Заступник директора, Ірина КОВАЛЬ; Головний бухгалтер, Олег БІЛИЙ» → [(посада, ім'я)]."""
+    out = []
+    for part in (text or "").split(";"):
+        part = part.strip()
+        if not part:
+            continue
+        pos, _, name = part.rpartition(",")
+        out.append((pos.strip() or part, name.strip() if pos else ""))
+    return out
+
+
+def duplex_hint(kind: str) -> str:
+    """Накази зі строком зберігання до 5 років можна друкувати з обох боків аркуша (№ 676, дод. 1 п. 8)."""
+    return " Можна друкувати з обох боків аркуша (строк зберігання до 5 років)." if kind in ("v", "g") else ""
+
+
 def dstu_signature(name: str) -> str:
     """«Олена Петренко», «Петренко Олена Іванівна», «О. Петренко» → «Олена ПЕТРЕНКО» / «О. ПЕТРЕНКО» (ДСТУ п. 5.22)."""
     parts = [p for p in name.replace(",", " ").split() if p]
@@ -172,6 +189,14 @@ def build_docx(db: Database, order_id: int) -> Document:
     s.paragraph_format.tab_stops.add_tab_stop(Mm(SIGN_INDENT), WD_TAB_ALIGNMENT.LEFT)
     s.paragraph_format.keep_together = True
     _font(s.add_run(f"{position}\t{o['signer']}"), size)
+    for pos, name in visas_list(o["visas"] if "visas" in o.keys() else ""):
+        # віза: посада, підпис, власне ім'я ПРІЗВИЩЕ, дата (ДСТУ 4163:2020 п. 5.24; розміщення – нижче підпису)
+        _para(doc, pos, size, before=14).paragraph_format.keep_with_next = True
+        q = _para(doc, size=size)
+        q.paragraph_format.tab_stops.add_tab_stop(Mm(45), WD_TAB_ALIGNMENT.LEFT)
+        q.paragraph_format.keep_with_next = True
+        _font(q.add_run(f"____________\t{name}"), size)
+        _para(doc, "____.____.20___", size)
     if db.get_setting("acquaint") == "1":
         # ДСТУ 4163:2020 п. 5.28: підпис, власне ім'я ПРІЗВИЩЕ, дата (власноручно), нижче реквізиту «Підпис»
         s.paragraph_format.keep_with_next = True

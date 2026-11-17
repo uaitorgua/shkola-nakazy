@@ -125,7 +125,8 @@ class PortableTest(unittest.TestCase):
         rep = import_json(js, os.path.join(self.d, "new.db"))
         self.assertEqual(rep["skipped"], {})
         new = Database(os.path.join(self.d, "new.db"))
-        self.assertEqual(self.dump(new), self.dump(self.db))  # усі таблиці, зокрема двійкові файли, без змін
+        full = lambda d: {t: r for t, r in d.items() if r}  # noqa: E731  (порожні таблиці не порівнюємо)
+        self.assertEqual(full(self.dump(new)), full(self.dump(self.db)))  # усі дані, зокрема двійкові файли
         self.assertEqual(new.get_setting("head"), "Олена ПЕТРЕНКО")
         self.assertEqual(len(new.list_orders(query="відпустки")), 1)  # пошуковий індекс збудовано
         new.close()

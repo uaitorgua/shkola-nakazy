@@ -60,11 +60,14 @@ class MainWindow(QMainWindow):
                        ("Зареєструвати", self.register_current), ("Наказ про зміни", self.amend_current),
                        ("Скасувати", self.cancel_current), ("Зберегти DOCX/PDF…", self.export_current)),
                       (("Журнал…", self.export_journal), ("Справи…", self.open_cases), ("Перевірка", self.run_audit),
+                       ("Нагадування…", self.open_reminders),
                        ("Люди…", self.open_people), ("Графік відпусток…", self.open_leave_plan), ("Імпорт наказів…", self.import_orders), ("Дані й копії…", self.open_data),
                        ("Заклад…", self.settings))):
             row = QHBoxLayout()
             for text, slot in group:
                 b = QPushButton(text); b.clicked.connect(slot); row.addWidget(b)
+                if text == "Нагадування…":
+                    self.remind_btn = b
             row.addStretch(); rows.append(row)
         ml.addLayout(rows[0]); ml.addLayout(rows[1]); ml.addWidget(self.search); ml.addWidget(self.list, 1)
 
@@ -79,6 +82,7 @@ class MainWindow(QMainWindow):
 
     # бокове меню
     def refresh(self):
+        self._update_reminders()
         cur_year = self.year.currentData()
         self.year.blockSignals(True); self.year.clear()
         for y in self.db.years():
@@ -203,7 +207,10 @@ class MainWindow(QMainWindow):
         if QMessageBox.question(self, "Реєстрація", msg) == QMessageBox.Yes:
             idx = self._try(lambda: self.db.register(r["id"]))
             if idx:
-                QMessageBox.information(self, "Реєстрація", f"Наказ зареєстровано під № {idx}.")
+                from ..effects import apply
+                done = self._try(lambda: apply(self.db, r["id"])) or []
+                QMessageBox.information(self, "Реєстрація", f"Наказ зареєстровано під № {idx}."
+                                        + ("\n\nДовідник «Люди»:\n" + "\n".join(done) if done else ""))
             self.refresh()
 
     def amend_current(self):
@@ -219,7 +226,12 @@ class MainWindow(QMainWindow):
             return
         reason, ok = QInputDialog.getText(self, "Скасування", "Підстава (напр. наказ від … № … про скасування):")
         if ok and reason.strip():
-            self._try(lambda: self.db.cancel(r["id"], reason.strip())); self.refresh()
+            self._try(lambda: self.db.cancel(r["id"], reason.strip()))
+            from ..effects import revert
+            back = self._try(lambda: revert(self.db, r["id"])) or []
+            if back:
+                QMessageBox.information(self, "Скасування", "Довідник «Люди»:\n" + "\n".join(back))
+            self.refresh()
 
     def export_journal(self):
         kind, ok = QInputDialog.getItem(self, "Журнал реєстрації", "Вид:", [k.journal for k in KINDS], 0, False)
@@ -230,6 +242,19 @@ class MainWindow(QMainWindow):
         path, _ = QFileDialog.getSaveFileName(self, "Зберегти журнал", f"Журнал {code} {year}.docx", "DOCX (*.docx)")
         if path:
             self._try(lambda: export_journal_docx(self.db, code, year, path))
+
+    def open_reminders(self):
+        from .extra_dialogs import RemindersDialog
+        RemindersDialog(self, self.db, self.open_editor).exec()
+        self.refresh()
+
+    def _update_reminders(self):
+        from ..reminders import reminders
+        try:
+            n = len(reminders(self.db))
+        except Exception:
+            n = 0
+        self.remind_btn.setText(f"Нагадування… ({n})" if n else "Нагадування…")
 
     def run_audit(self):
         from ..audit import audit
@@ -297,7 +322,8 @@ class MainWindow(QMainWindow):
             return
         fn = export_docx if path.lower().endswith(".docx") else export_pdf
         if self._try(lambda: fn(self.db, r["id"], path)):
-            self.statusBar().showMessage(f"Збережено: {path}", 8000)
+            from ..export import duplex_hint
+            self.statusBar().showMessage(f"Збережено: {path}.{duplex_hint(r['kind'])}", 12000)
 
 
 def _setup_log():

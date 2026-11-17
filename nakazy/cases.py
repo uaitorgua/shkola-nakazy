@@ -116,6 +116,23 @@ def case_inventory_html(db: Database, kind: str, year: int) -> str:
             f"{body}</table>")
 
 
+def case_title_html(db: Database, kind: str, year: int) -> str:
+    """Титульний аркуш справи: заклад, індекс і заголовок справи, рік, кількість наказів, строк зберігання."""
+    import html as _h
+    c = Cases(db).get(year, kind)
+    rows = db.journal(kind, year)
+    first = format_date(rows[0]["date"]) if rows else "–"
+    last = format_date(rows[-1]["date"]) if rows else "–"
+    gap = "<p><br/></p>" * 3
+    return (f"<p align=center><b>{_h.escape(db.get_setting('school') or '')}</b></p>{gap}"
+            f"<p align=center><b>СПРАВА № {_h.escape(c['case_index'] or '____')}</b></p><p><br/></p>"
+            f"<p align=center><b>{_h.escape(c['title'])}</b></p><p><br/></p>"
+            f"<p align=center>{year} рік</p>{gap}"
+            f"<p>Розпочато: {first}</p><p>Закінчено: {last}</p><p>Наказів у справі: {len(rows)}</p>"
+            f"<p>Строк зберігання: {_h.escape(c['retention'] or '–')}"
+            f"{' (ст. ' + _h.escape(c['article']) + ' Переліку 578/5)' if c['article'] else ''}</p>")
+
+
 def export_case_pdf(db: Database, kind: str, year: int, path: str, progress=None) -> str:
     """Справа одним PDF: перелік наказів, далі накази з додатками в хронологічному порядку
     (№ 676 р. VI пп. 3–4). Архівні накази з PDF-оригіналом вставляються як є."""
@@ -128,8 +145,10 @@ def export_case_pdf(db: Database, kind: str, year: int, path: str, progress=None
     inv = html_to_docx(_html(case_inventory_html(db, kind, year)), None, MARGINS)
     format_tables(inv, 14)
     inv_path = os.path.join(tmp, "000-inv.docx"); inv.save(inv_path)
+    title = html_to_docx(_html(case_title_html(db, kind, year)), None, MARGINS)
+    title_path = os.path.join(tmp, "000-atitle.docx"); title.save(title_path)
     orders = db.journal(kind, year)
-    plan, docx = [], [inv_path]
+    plan, docx = [], [title_path, inv_path]
     for i, o in enumerate(orders):
         if progress:
             progress(i, len(orders) * 2)
@@ -147,6 +166,7 @@ def export_case_pdf(db: Database, kind: str, year: int, path: str, progress=None
         progress(len(orders), len(orders) * 2)
     docx_to_pdf_many(docx)
     w = PdfWriter()
+    w.append(PdfReader(os.path.splitext(title_path)[0] + ".pdf"))
     w.append(PdfReader(os.path.splitext(inv_path)[0] + ".pdf"))
     for o, p in plan:
         w.append(PdfReader(p))

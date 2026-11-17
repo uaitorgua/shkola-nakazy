@@ -23,7 +23,8 @@ FORMAT_VERSION = 1
 SKIP = re.compile(r"^(orders_fts.*|_fts_cache|sqlite_.*)$")
 # порядок вставки: спершу те, на що посилаються інші таблиці
 ORDER = ["meta", "counters", "people", "classes", "orders", "attachments", "originals", "order_persons",
-         "order_versions", "order_links", "leave_days", "leave_plan", "blanks", "audit"]
+         "order_versions", "order_links", "leave_days", "leave_plan", "order_values", "order_effects", "nomenclature",
+         "blanks", "audit"]
 
 
 def _tables(con) -> list[str]:
@@ -78,6 +79,8 @@ def import_json(path: str, target: str) -> dict:
     if os.path.exists(target):
         raise ImportError_("Цільовий файл уже існує.")
     db = Database(target)
+    from .cases import Cases
+    Cases(db)  # таблиця номенклатури справ створюється окремо від основної будови
     report = {"rows": {}, "skipped": {}, "from_version": data.get("app_version", "")}
     try:
         db.con.execute("PRAGMA foreign_keys = OFF")

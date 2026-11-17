@@ -319,7 +319,8 @@ class OrderEditor(QMainWindow):
         self.timer.timeout.connect(self.sync_now)
         QShortcut(QKeySequence.Save, self, activated=self.save)
         self._build_dock(row)
-        for sig in (self.title_e.textChanged, self.signer.textChanged, self.date.dateChanged, self.acting.toggled):
+        for sig in (self.title_e.textChanged, self.signer.textChanged, self.date.dateChanged, self.acting.toggled,
+                    self.visas.textChanged):
             sig.connect(lambda *_: self._refresh_frame())
         self._refresh_frame()
         if self.imported:
@@ -387,6 +388,10 @@ class OrderEditor(QMainWindow):
         sign_w = int(SIGN_MM * MM)
         foot = (f"<table cellspacing=0 cellpadding=0 style=\"{css} font-size:{size}pt\"><tr>"
                 f"<td width={sign_w}>{_h.escape(position)}</td><td>{_h.escape(self.signer.text())}</td></tr></table>")
+        from ..export import visas_list
+        for pos, name in visas_list(self.visas.text()):
+            foot += (f"<p style=\"{css} font-size:{size}pt; margin-top:14pt\">{_h.escape(pos)}<br>"
+                     f"____________ &nbsp; {_h.escape(name)}<br>____.____.20___</p>")
         if db.get_setting("acquaint") == "1":
             from ..export import dstu_signature
             names = [dstu_signature(x) for x in (self.responsible.text() or "").split(",") if x.strip()]
@@ -483,12 +488,23 @@ class OrderEditor(QMainWindow):
         self.acting = QCheckBox("в. о. керівника"); self.acting.setChecked(bool(row["signer_acting"]))
         self.controller = QLineEdit(row["controller"]); self.responsible = QLineEdit(row["responsible"])
         self.notes = QLineEdit(row["notes"])
+        self.visas = QLineEdit(row["visas"]); self.visas.setPlaceholderText("Посада, Ім'я ПРІЗВИЩЕ; Посада, Ім'я ПРІЗВИЩЕ")
+        self.visas.setToolTip("Візи погодження під підписом: посада, підпис, власне ім'я ПРІЗВИЩЕ, дата "
+                              "(ДСТУ 4163:2020 п. 5.24)")
         for label, e in (("Вид", self.kind), ("Тип", self.type_name), ("Дата", self.date),
                          ("Заголовок", self.title_e), ("Підстава", self.basis), ("Підписує", self.signer),
-                         ("", self.acting), ("Контроль", self.controller), ("Відповідальні", self.responsible),
-                         ("Примітки", self.notes)):
+                         ("", self.acting), ("Візи", self.visas), ("Контроль", self.controller),
+                         ("Відповідальні", self.responsible), ("Примітки", self.notes)):
             f.addRow(label, e)
             e.setEnabled(not self.readonly)
+        # контроль виконання: службові позначки, доступні й після реєстрації
+        self.due = QLineEdit(format_date(row["due_date"]) if row["due_date"] else "")
+        self.due.setPlaceholderText("дд.мм.рррр (порожньо – без строку)")
+        self.due.editingFinished.connect(self._save_due)
+        self.done = QCheckBox("Виконано"); self.done.setChecked(bool(row["done"]))
+        self.done.setEnabled(row["status"] == "registered")
+        self.done.toggled.connect(lambda on: self.db.set_done(self.order_id, on))
+        f.addRow("Строк виконання", self.due); f.addRow("", self.done)
         self.atts = QListWidget(); f.addRow(QLabel("<b>Додатки</b>"))
         f.addRow(self.atts)
         ab = QHBoxLayout()
@@ -543,13 +559,22 @@ class OrderEditor(QMainWindow):
         if it:
             self.db.remove_attachment(it.data(Qt.UserRole)); self._reload_atts()
 
+    def _save_due(self):
+        from ..importer import parse_date
+        text = self.due.text().strip()
+        iso = parse_date(text) if text else ""
+        if text and not iso:
+            self.statusBar().showMessage("Строк виконання: формат дд.мм.рррр."); return
+        self.db.set_control(self.order_id, iso or "")
+        self.saved.emit(self.order_id)
+
     def _values(self) -> dict:
         return dict(kind=self.kind.currentData(), type_name=self.type_name.text().strip(),
                     date=self.date.date().toString("yyyy-MM-dd"), title=self.title_e.text().strip(),
                     basis=self.basis.text().strip(), signer=self.signer.text().strip(),
                     signer_acting=int(self.acting.isChecked()), controller=self.controller.text().strip(),
                     responsible=self.responsible.text().strip(), notes=self.notes.text().strip(),
-                    body_html=self.text.html())
+                    visas=self.visas.text().strip(), body_html=self.text.html())
 
     def _check(self):
         row = self.db.get(self.order_id)
@@ -580,7 +605,8 @@ class OrderEditor(QMainWindow):
             return
         try:
             (export_docx if path.lower().endswith(".docx") else export_pdf)(self.db, self.order_id, path)
-            self.statusBar().showMessage(f"Збережено: {path}")
+            from ..export import duplex_hint
+            self.statusBar().showMessage(f"Збережено: {path}.{duplex_hint(self.kind.currentData())}")
         except Exception as e:
             QMessageBox.warning(self, "Накази ШКОЛА", str(e))
 
@@ -641,6 +667,8 @@ def create_from_template(db: Database, template_id: str, values: dict[str, str],
         ppl.link(oid, pid, key)
     for key, ref_id in (refs or {}).items():
         db.link_order(oid, key, ref_id)
+    db.save_values(oid, {k: v for k, v in values.items() if not k.startswith("_")},
+                   [{k: v for k, v in row.items()} for row in (group or [])] if t.group_title else None)
     from ..leave import record
     if group and t.group_title:
         for row in group:

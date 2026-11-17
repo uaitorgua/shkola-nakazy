@@ -31,7 +31,8 @@ class PersonDialog(QDialog):
         f = QFormLayout(self)
         self.e = {}
         cols = PUPIL_COLS if kind == "pupil" else STAFF_COLS
-        extra = [("subjects", "Предмети"), ("leave_right", "Щорічна відпустка, днів на рік")] if kind == "staff" else []
+        extra = [("subjects", "Предмети"), ("leave_right", "Щорічна відпустка, днів на рік"),
+                 ("attest_year", "Наступна атестація (рік)")] if kind == "staff" else []
         for key, title in cols + extra + [("note", "Примітка")]:
             w = QLineEdit(str(row[key] or "") if row else "")
             if key == "birth" and row and row["birth"]:
@@ -65,10 +66,12 @@ class PersonDialog(QDialog):
             v["birth"] = b
         else:
             v["birth"] = None
-        if "leave_right" in v:
-            if v["leave_right"] and not v["leave_right"].isdigit():
-                QMessageBox.warning(self, "Картка", "Щорічна відпустка: кількість днів числом."); return
-            v["leave_right"] = int(v["leave_right"]) if v["leave_right"] else None
+        for key, title in (("leave_right", "Щорічна відпустка: кількість днів числом."),
+                           ("attest_year", "Наступна атестація: рік числом, напр. 2027.")):
+            if key in v:
+                if v[key] and not v[key].isdigit():
+                    QMessageBox.warning(self, "Картка", title); return
+                v[key] = int(v[key]) if v[key] else None
         if self.kind == "pupil" and v.get("cls"):
             v["cls"] = importer.norm_cls(v["cls"])
         v["sex"] = self.sex.currentData() or ""
@@ -201,7 +204,7 @@ class PeopleWindow(QMainWindow):
         self.show_left = QCheckBox("показати вибулих"); self.show_left.toggled.connect(lambda _b: self.reload())
         bar = QHBoxLayout()
         for text, slot in (("Додати", self.add), ("Змінити", self.edit), ("Імпорт…", self.do_import),
-                           ("Класний керівник…", self.set_teacher)):
+                           ("Класний керівник…", self.set_teacher), ("Алфавітна книга…", self.alphabet)):
             b = QPushButton(text); b.clicked.connect(slot); bar.addWidget(b)
         bar.addWidget(self.search, 1); bar.addWidget(self.cls); bar.addWidget(self.show_left)
         self.card = QTextBrowser()
@@ -266,6 +269,10 @@ class PeopleWindow(QMainWindow):
         d = ImportDialog(self, self.db, self.kind())
         if d.exec():
             self.reload()
+
+    def alphabet(self):
+        from .extra_dialogs import AlphabetDialog
+        AlphabetDialog(self, self.ppl.db).exec()
 
     def set_teacher(self):
         cls = self.cls.currentData()

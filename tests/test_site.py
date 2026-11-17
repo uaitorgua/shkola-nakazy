@@ -33,7 +33,7 @@ class SiteTest(unittest.TestCase):
         src = open(os.path.join(ROOT, "nakazy", "ui", "main_window.py"), encoding="utf-8").read()
         page = open(PAGE, encoding="utf-8").read()
         for label in ("Новий наказ", "Зареєструвати", "Наказ про зміни", "Скасувати", "Зберегти DOCX/PDF…",
-                      "Журнал…", "Справи…", "Перевірка", "Люди…", "Графік відпусток…", "Імпорт наказів…", "Дані й копії…", "Заклад…"):
+                      "Журнал…", "Справи…", "Перевірка", "Нагадування…", "Люди…", "Графік відпусток…", "Імпорт наказів…", "Дані й копії…", "Заклад…"):
             self.assertIn(f'"{label}"', src, label)
             self.assertIn(label, page, label)
 

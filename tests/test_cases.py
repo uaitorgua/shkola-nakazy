@@ -55,7 +55,9 @@ class CasesTest(unittest.TestCase):
         from pypdf import PdfReader
         r = PdfReader(p)
         self.assertGreaterEqual(len(r.pages), 5)  # перелік + 4 накази
-        self.assertIn("Справа", r.pages[0].extract_text())
+        self.assertIn("СПРАВА", r.pages[0].extract_text())           # титульний аркуш
+        self.assertIn("Наказів у справі", r.pages[0].extract_text())
+        self.assertIn("Справа", r.pages[1].extract_text())           # перелік наказів
 
     def test_dialog(self):
         from PySide6.QtWidgets import QApplication
