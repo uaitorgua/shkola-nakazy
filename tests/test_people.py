@@ -250,6 +250,53 @@ class Gui(unittest.TestCase):
         self.assertIn("право не вказано", summary_html(db, n))
         db.close()
 
+    def test_group_order(self):
+        """Груповий наказ: пункт на кожного працівника, спільні пункти один раз, зв'язки й дні відпустки."""
+        from PySide6.QtWidgets import QApplication
+        QApplication.instance() or QApplication([])
+        from nakazy.leave import summary
+        from nakazy.templates import TEMPLATES, group_fields, render_group
+        from nakazy.ui.order_editor import TemplatePicker, create_from_template
+        for t in TEMPLATES:  # кожен груповий шаблон: заголовок «Про», без незаповнених полів
+            if t.group_title:
+                vals = {k: f"<{k}>" for k, _ in t.fields}
+                rows = [{k: f"<{k}{i}>" for k, _ in group_fields(t)} for i in (1, 2)]
+                title, body = render_group(t, vals, rows)
+                self.assertTrue(title.startswith("Про ") and "{" not in title + body, t.id)
+                self.assertIn("<employee2>", body.replace("&lt;", "<").replace("&gt;", ">"), t.id)
+        d = tempfile.mkdtemp(); db = Database(os.path.join(d, "g.db")); ppl = People(db)
+        db.set_setting("head", "Олена ПЕТРЕНКО")
+        a = ppl.add(kind="staff", last="Коваль", first="Марія", middle="Іванівна", position="вчитель", leave_right=56)
+        b = ppl.add(kind="staff", last="Білий", first="Микола", middle="Іванович", position="бібліотекар", leave_right=28)
+        tp = TemplatePicker(None, "v", db)
+        tops = [tp.tree.topLevelItem(k) for k in range(tp.tree.topLevelItemCount())]
+        items = [t.child(i).child(j) for t in tops for i in range(t.childCount())
+                 for j in range(t.child(i).childCount())]
+        tp.tree.setCurrentItem(next(it for it in items if it.data(0, 256) == "v_annual"))
+        tp.edits["application"].setText("заяв працівників")
+        tp.group_box.setChecked(True)
+        tp._group_add(a); tp._group_add(b); tp._group_add()  # третій – порожній рядок, пропускається
+        cols = [k for k, _ in tp.gcols]
+        for r, days in ((0, "28"), (1, "14")):
+            for k, v in (("vtype", "основну"), ("days", days), ("from_date", "01.07.2026"),
+                         ("to_date", "28.07.2026"), ("period", "з 01.09.2025 по 31.08.2026")):
+                tp.gtable.item(r, cols.index(k)).setText(v)
+        vals = tp.values()
+        self.assertEqual([r["_pid"] for r in tp.group], [a, b])
+        self.assertNotIn("days", vals)
+        oid = create_from_template(db, "v_annual", vals, persons=tp.persons, refs=tp.refs, group=tp.group)
+        row = db.get(oid)
+        self.assertEqual(row["title"], "Про надання щорічних відпусток працівникам")
+        self.assertIn("1. Надати Коваль Марії Іванівні, вчитель", row["body_html"])
+        self.assertIn("2. Надати Білому Миколі Івановичу, бібліотекар", row["body_html"])
+        self.assertEqual(sorted(p["id"] for p in ppl.persons_of(oid)), sorted([a, b]))
+        db.register(oid, "2026-06-20")
+        self.assertEqual((summary(db, a)[0]["left"], summary(db, b)[0]["left"]), (28, 14))
+        # вимкнений груповий режим – звичайний індивідуальний наказ
+        tp.group_box.setChecked(False); tp.values()
+        self.assertIsNone(tp.group)
+        db.close()
+
 from qt_cleanup import tearDownModule  # noqa: E402,F401
 
 if __name__ == "__main__":

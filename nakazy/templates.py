@@ -37,6 +37,8 @@ class Template:
     basis: str = ""           # нормативна підстава (орієнтир)
     attachments: list[str] = field(default_factory=list)  # назви додатків
     approve: bool = False     # додатки затверджуються наказом: гриф «ЗАТВЕРДЖЕНО» (ДСТУ п. 5.16)
+    group_title: str = ""     # груповий наказ (кілька працівників): заголовок; порожньо – лише індивідуальний
+    group_after: list[str] | None = None  # спільні пункти групового наказу замість індивідуальних (None – ті самі)
 
     def placeholders(self) -> list[tuple[str, str]]:
         return self.fields
@@ -503,6 +505,39 @@ def render(t: Template, values: dict[str, str]) -> tuple[str, str]:
     return title, "".join(parts)
 
 
+def person_items(t: Template) -> list[str]:
+    """Пункти, що стосуються працівника: у груповому наказі повторюються для кожного."""
+    return [i for i in t.items if "{employee" in i]
+
+
+def common_items(t: Template) -> list[str]:
+    return t.group_after if t.group_after is not None else [i for i in t.items if "{employee" not in i]
+
+
+def group_fields(t: Template) -> list[tuple[str, str]]:
+    """Поля, що вводяться окремо для кожного працівника групового наказу."""
+    def keys(text):
+        return {m.group(1) for m in _PH.finditer(text)}
+    per = set().union(*(keys(i) for i in person_items(t))) if person_items(t) else set()
+    common = keys(t.group_title + t.preamble + "".join(common_items(t)))
+    return [(k, l) for k, l in t.fields if k in per - common]
+
+
+def render_group(t: Template, values: dict[str, str], rows: list[dict[str, str]]) -> tuple[str, str]:
+    """Груповий наказ (як «Опис пунктів» у HRMIS): пункти працівника повторюються для кожного рядка,
+    далі спільні пункти; нумерація наскрізна."""
+    title = fill(t.group_title, values)
+    esc = lambda s, v: html.escape(fill(s, v))  # noqa: E731
+    parts = [f"{P_JUST}{esc(t.preamble, values)}</p>", "<p style='margin:12px 0 0 0'>НАКАЗУЮ:</p>"]
+    n = 0
+    for row in rows:
+        for item in person_items(t):
+            n += 1; parts.append(f"{P_JUST}{n}. {esc(item, {**values, **row})}</p>")
+    for item in common_items(t):
+        n += 1; parts.append(f"{P_JUST}{n}. {esc(item, values)}</p>")
+    return title, "".join(parts)
+
+
 def types_by_kind() -> dict[str, list[str]]:
     out: dict[str, list[str]] = {}
     for t in TEMPLATES:
@@ -516,6 +551,20 @@ def types_by_kind() -> dict[str, list[str]]:
 for _id in ("o_year_start", "o_attest", "o_attest_list", "o_qualification", "k_load", "o_duty", "o_olympiad",
             "o_dpa", "o_pedrada"):
     TEMPLATE_BY_ID[_id].approve = True
+
+# групові накази (кілька працівників в одному наказі, як у HRMIS)
+for _id, (_title, _after) in {
+    "v_annual": ("Про надання щорічних відпусток працівникам", None),
+    "v_dayoff": ("Про надання днів відпочинку працівникам", None),
+    "v_trip": ("Про відрядження працівників", None),
+    "k_weekend": ("Про залучення працівників до роботи у вихідний день {work_date}", None),
+    "k_reward": ("Про заохочення працівників", None),
+    "k_seniority": ("Про встановлення надбавок за вислугу років працівникам",
+                    ["Бухгалтерії нараховувати надбавки з дат, зазначених у наказі."]),
+    "k_aid": ("Про виплату {aid} працівникам", None),
+    "k_training": ("Про направлення на підвищення кваліфікації працівників", None),
+}.items():
+    TEMPLATE_BY_ID[_id].group_title, TEMPLATE_BY_ID[_id].group_after = _title, _after
 
 
 def _norm(s: str) -> str:

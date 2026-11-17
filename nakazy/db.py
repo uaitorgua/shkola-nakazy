@@ -12,7 +12,7 @@ import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 
 @dataclass(frozen=True)
@@ -104,15 +104,20 @@ CREATE TABLE IF NOT EXISTS order_links (
     ref_id INTEGER NOT NULL REFERENCES orders(id),
     PRIMARY KEY (order_id, field));
 CREATE TABLE IF NOT EXISTS leave_days (
-    order_id INTEGER PRIMARY KEY REFERENCES orders(id) ON DELETE CASCADE,
+    order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
     person_id INTEGER NOT NULL REFERENCES people(id),
     work_year TEXT NOT NULL DEFAULT '',      -- робочий рік «дд.мм.рррр–дд.мм.рррр» або як введено
     op TEXT NOT NULL,                        -- used | comp | back
-    days INTEGER NOT NULL);
+    days INTEGER NOT NULL,
+    PRIMARY KEY (order_id, person_id));      -- v7: груповий наказ – кілька працівників
 CREATE TABLE IF NOT EXISTS blanks (
     id INTEGER PRIMARY KEY, name TEXT NOT NULL, mode TEXT NOT NULL,  -- 'text' | 'image' | 'docx'
     data BLOB, fields_json TEXT NOT NULL DEFAULT '{}', is_default INTEGER NOT NULL DEFAULT 0);
 """
+
+
+_LEAVE_DAYS = _SCHEMA[_SCHEMA.index("CREATE TABLE IF NOT EXISTS leave_days"):]
+_LEAVE_DAYS = _LEAVE_DAYS[:_LEAVE_DAYS.index(";")]
 
 
 class OrderLocked(Exception):
@@ -168,6 +173,15 @@ class Database:
         for col in ("type_name", "template_id", "source"):  # v1 -> v2 -> v4
             if col not in cols:
                 self.con.execute(f"ALTER TABLE orders ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
+        pk = [r[1] for r in self.con.execute("PRAGMA table_info(leave_days)") if r[5]]
+        if pk == ["order_id"]:  # v6 -> v7: ключ (наказ, працівник) для групових наказів
+            self.con.execute("PRAGMA foreign_keys = OFF")  # перенесення рядків як є
+            self.con.executescript(
+                "BEGIN; ALTER TABLE leave_days RENAME TO leave_days_v6;"
+                + _LEAVE_DAYS.replace("IF NOT EXISTS ", "") + ";"
+                "INSERT INTO leave_days SELECT order_id, person_id, work_year, op, days FROM leave_days_v6;"
+                "DROP TABLE leave_days_v6; COMMIT;")
+            self.con.execute("PRAGMA foreign_keys = ON")
         if "leave_right" not in {r[1] for r in self.con.execute("PRAGMA table_info(people)")}:  # v6
             self.con.execute("ALTER TABLE people ADD COLUMN leave_right INTEGER")
         self.con.execute("INSERT OR REPLACE INTO meta VALUES ('schema_version', ?)", (str(SCHEMA_VERSION),))

@@ -7,13 +7,14 @@ from PySide6.QtCore import QDate, Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDateEdit, QDialog, QDialogButtonBox, QDockWidget, QFileDialog, QFormLayout,
     QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QPushButton,
-    QScrollArea, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
+    QAbstractItemView, QScrollArea, QTableWidget, QTableWidgetItem, QTreeWidget, QTreeWidgetItem, QVBoxLayout,
+    QWidget,
 )
 
 from shkola.ui.editor_window import EditorWindow
 
 from ..db import KINDS, KIND_BY_CODE, Database, OrderLocked, check_structure, format_date
-from ..templates import REFS, TEMPLATE_BY_ID, TEMPLATES, ref_values, render
+from ..templates import REFS, TEMPLATE_BY_ID, TEMPLATES, group_fields, ref_values, render, render_group
 
 
 LEAVE_TEMPLATES = ("v_annual", "v_compensation", "v_recall", "v_transfer")
@@ -31,6 +32,9 @@ class TemplatePicker(QDialog):
         self.persons: dict[str, int] = {}
         self.refs: dict[str, int] = {}          # поле → id наказу-підстави
         self.ref_boxes: dict[str, QComboBox] = {}
+        self.group: list[dict] | None = None    # груповий наказ: рядок на працівника (_pid – id з довідника)
+        self.group_box: QCheckBox | None = None
+        self.form_rows: dict = {}
         self.setWindowTitle("Новий наказ за шаблоном")
         self.resize(900, 600)
         self.tree = QTreeWidget(); self.tree.setHeaderHidden(True)
@@ -95,8 +99,10 @@ class TemplatePicker(QDialog):
 
     def _show(self, it, _prev=None):
         tid = it.data(0, Qt.UserRole) if it else None
-        w = QWidget(); f = QFormLayout(w); self.edits = {}
+        w = QWidget(); f = QFormLayout(w); self.edits = {}; self.form = f
+        f.setRowWrapPolicy(QFormLayout.WrapAllRows)  # підпис над полем: довгі підписи не стискають поле
         self.template_id = tid
+        self.group, self.group_box, self.form_rows = None, None, {}
         if tid:
             t = TEMPLATE_BY_ID[tid]
             self.info.setText(f"<b>{KIND_BY_CODE[t.kind].title}</b> · {t.type}<br>"
@@ -128,13 +134,92 @@ class TemplatePicker(QDialog):
                     cb.completer().setFilterMode(Qt.MatchContains)
                     cb.activated.connect(lambda i, k=key, c=cb: self._pick_person(k, c.itemData(i)))
                     row.addWidget(cb); row.addWidget(e); e.setPlaceholderText("або введіть вручну")
-                    f.addRow(label, row)
+                    f.addRow(label, row); self.form_rows[key] = row
                 else:
-                    f.addRow(label, e)
+                    f.addRow(label, e); self.form_rows[key] = e
+            if t.group_title and self.db is not None:
+                self._build_group(f, t)
         else:
             self.info.setText("Порожня чернетка." if tid == "" else "Оберіть шаблон ліворуч.")
         self.form_host.setWidget(w)
         self.template_id = tid
+
+    # груповий наказ (кілька працівників, як «Опис пунктів» у HRMIS)
+    def _build_group(self, f, t):
+        self.gcols = group_fields(t)
+        self.group_box = QCheckBox("Кілька працівників (груповий наказ)")
+        f.insertRow(0, self.group_box)
+        self.gtable = QTableWidget(0, len(self.gcols))
+        self.gtable.setHorizontalHeaderLabels([lbl.split(" (")[0] for _k, lbl in self.gcols])
+        self.gtable.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.gtable.setMinimumHeight(180); self.gtable.horizontalHeader().setStretchLastSection(True)
+        btns = QHBoxLayout()
+        for text, slot in (("Додати з довідника…", self._group_from_people), ("+ рядок", lambda: self._group_add()),
+                           ("Прибрати", self._group_del)):
+            b = QPushButton(text); b.clicked.connect(slot); btns.addWidget(b)
+        self.gwidget = QWidget(); gl = QVBoxLayout(self.gwidget); gl.setContentsMargins(0, 0, 0, 0)
+        hint = QLabel("Кожен рядок – окремий пункт наказу; спільні поля – нижче."); hint.setWordWrap(True)
+        gl.addWidget(hint)
+        gl.addWidget(self.gtable); gl.addLayout(btns)
+        f.insertRow(1, self.gwidget); f.setRowVisible(self.gwidget, False)
+        self.group_box.toggled.connect(self._group_toggled)
+
+    def _group_toggled(self, on: bool):
+        self.form.setRowVisible(self.gwidget, on)
+        for key, _l in self.gcols:
+            if key in self.form_rows:
+                self.form.setRowVisible(self.form_rows[key], not on)
+        emp = self.edits.get("employee")
+        if on and self.gtable.rowCount() == 0 and emp is not None and emp.text().strip():
+            self._group_add(self.persons.get("employee"))  # уже вибраний працівник – перший рядок
+
+    def _group_add(self, pid=None):
+        """Новий рядок; з довідника – ПІБ, відмінки й посада підставляються."""
+        r = self.gtable.rowCount(); self.gtable.insertRow(r)
+        vals = {}
+        if pid is not None:
+            from ..people import People, person_values
+            ppl = People(self.db); vals = person_values(ppl, ppl.get(pid), "employee")
+        for c, (key, _l) in enumerate(self.gcols):
+            text = vals.get(key) or (self.edits[key].text().strip() if key in self.edits else "")
+            it = QTableWidgetItem(text)
+            if c == 0:
+                it.setData(Qt.UserRole, (pid, vals))
+            self.gtable.setItem(r, c, it)
+
+    def _group_from_people(self):
+        from ..people import People
+        dlg = QDialog(self); dlg.setWindowTitle("Працівники"); v = QVBoxLayout(dlg)
+        lst = QListWidget(); lst.setSelectionMode(QAbstractItemView.MultiSelection)
+        for p in People(self.db).find("staff"):
+            name = f"{p['last']} {p['first']} {p['middle']}" + (f" ({p['position']})" if p["position"] else "")
+            it = QListWidgetItem(name); it.setData(Qt.UserRole, p["id"]); lst.addItem(it)
+        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        bb.accepted.connect(dlg.accept); bb.rejected.connect(dlg.reject)
+        v.addWidget(lst); v.addWidget(bb)
+        if dlg.exec():
+            for it in lst.selectedItems():
+                self._group_add(it.data(Qt.UserRole))
+
+    def _group_del(self):
+        for r in sorted({i.row() for i in self.gtable.selectedIndexes()}, reverse=True):
+            self.gtable.removeRow(r)
+
+    def _group_rows(self) -> list[dict]:
+        rows = []
+        for r in range(self.gtable.rowCount()):
+            cells = {key: (self.gtable.item(r, c).text().strip() if self.gtable.item(r, c) else "")
+                     for c, (key, _l) in enumerate(self.gcols)}
+            if not cells.get("employee"):
+                continue
+            pid, vals = self.gtable.item(r, 0).data(Qt.UserRole) or (None, {})
+            if pid is not None and vals.get("employee") == cells["employee"]:  # ПІБ не змінено – відмінки з довідника
+                cells.update({k: v for k, v in vals.items() if k.startswith("employee.")})
+            else:
+                pid = None
+            cells["_pid"] = pid
+            rows.append(cells)
+        return rows
 
     def _accept(self):
         if self.template_id is None:
@@ -186,6 +271,12 @@ class TemplatePicker(QDialog):
         for key, oid in list(self.refs.items()):  # посилання лишається, лише якщо поле не змінено вручну
             if any(out.get(k) != v for k, v in ref_values(key, self.db.get(oid)).items()):
                 self.refs.pop(key)
+        self.group = None
+        if self.group_box is not None and self.group_box.isChecked():
+            self.group = self._group_rows()
+            self.persons.pop("employee", None)
+            for key, _l in self.gcols:
+                out.pop(key, None)
         return out
 
 
@@ -358,12 +449,14 @@ class OrderEditor(EditorWindow):
 
 
 def create_from_template(db: Database, template_id: str, values: dict[str, str], kind: str = "osn",
-                         persons: dict[str, int] | None = None, refs: dict[str, int] | None = None) -> int:
+                         persons: dict[str, int] | None = None, refs: dict[str, int] | None = None,
+                         group: list[dict] | None = None) -> int:
+    """group – рядки групового наказу (поле _pid – id працівника з довідника або None)."""
     if not template_id:
         return db.create_draft(kind, title="Про ", body_html="<p>…</p><p>НАКАЗУЮ:</p><p>1. …</p>",
                                signer=db.get_setting("head"))
     t = TEMPLATE_BY_ID[template_id]
-    title, body = render(t, values)
+    title, body = render_group(t, values, group) if group and t.group_title else render(t, values)
     oid = db.create_draft(t.kind, title=title, body_html=body, type_name=t.type, template_id=t.id,
                           basis=t.basis, signer=db.get_setting("head"))
     from ..people import People
@@ -373,7 +466,13 @@ def create_from_template(db: Database, template_id: str, values: dict[str, str],
     for key, ref_id in (refs or {}).items():
         db.link_order(oid, key, ref_id)
     from ..leave import record
-    record(db, oid, t.id, values, (persons or {}).get("employee"), refs)
+    if group and t.group_title:
+        for row in group:
+            if row.get("_pid") is not None:
+                ppl.link(oid, row["_pid"], "employee")
+                record(db, oid, t.id, {**values, **row}, row["_pid"], refs)
+    else:
+        record(db, oid, t.id, values, (persons or {}).get("employee"), refs)
     for a in t.attachments:
         body = ""
         if a.startswith("Список учнів") and values.get("cls") and ppl.find("pupil", cls=values["cls"]):

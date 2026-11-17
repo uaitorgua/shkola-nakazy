@@ -175,7 +175,7 @@ class MainWindow(QMainWindow):
         if dlg.exec():
             vals = dlg.values()
             oid = self._try(lambda: create_from_template(self.db, dlg.template_id, vals, kind or "osn", dlg.persons,
-                                                         getattr(dlg, "refs", {})))
+                                                         getattr(dlg, "refs", {}), getattr(dlg, "group", None)))
             self.refresh()
             if oid:
                 self.open_editor(oid)
